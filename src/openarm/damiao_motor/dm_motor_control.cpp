@@ -43,6 +43,10 @@ CANPacket CanPacketEncoder::create_query_param_command(const Motor& motor, int R
     return {0x7FF, pack_query_param_data(motor.get_send_can_id(), RID)};
 }
 
+CANPacket CanPacketEncoder::create_write_param_command(const Motor& motor, int RID, uint32_t value) {
+    return {0x7FF, pack_write_param_data(motor.get_send_can_id(), RID, value)};
+}
+
 CANPacket CanPacketEncoder::create_refresh_command(const Motor& motor) {
     uint8_t send_can_id = motor.get_send_can_id();
     std::vector<uint8_t> data = {static_cast<uint8_t>(send_can_id & 0xFF),
@@ -132,6 +136,17 @@ std::vector<uint8_t> CanPacketEncoder::pack_query_param_data(uint32_t send_can_i
             0x00,
             0x00,
             0x00};
+}
+
+std::vector<uint8_t> CanPacketEncoder::pack_write_param_data(uint32_t send_can_id, int RID, uint32_t value) {
+    return {static_cast<uint8_t>(send_can_id & 0xFF),
+            static_cast<uint8_t>((send_can_id >> 8) & 0xFF),
+            0x55,
+            static_cast<uint8_t>(RID),
+            static_cast<uint8_t>(value & 0xFF),
+            static_cast<uint8_t>((value >> 8) & 0xFF),
+            static_cast<uint8_t>((value >> 16) & 0xFF),
+            static_cast<uint8_t>((value >> 24) & 0xFF)};
 }
 
 std::vector<uint8_t> CanPacketEncoder::pack_command_data(uint8_t cmd) {

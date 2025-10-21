@@ -89,6 +89,20 @@ void DMDeviceCollection::query_param_all(int RID) {
     }
 }
 
+void DMDeviceCollection::write_param_one(int i, int RID, uint32_t value) {
+    CANPacket param_write =
+        CanPacketEncoder::create_write_param_command(get_dm_devices()[i]->get_motor(), RID, value);
+    send_command_to_device(get_dm_devices()[i], param_write);
+}
+
+void DMDeviceCollection::write_param_all(int RID, uint32_t value) {
+    for (auto dm_device : get_dm_devices()) {
+        CANPacket param_write =
+            CanPacketEncoder::create_write_param_command(dm_device->get_motor(), RID, value);
+        send_command_to_device(dm_device, param_write);
+    }
+}
+
 void DMDeviceCollection::send_command_to_device(std::shared_ptr<DMCANDevice> dm_device,
                                                 const CANPacket& packet) {
     if (can_socket_.is_canfd_enabled()) {

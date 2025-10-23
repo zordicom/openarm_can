@@ -15,6 +15,8 @@
 #include <linux/can.h>
 #include <linux/can/raw.h>
 
+#include <cerrno>
+#include <cstring>
 #include <iostream>
 #include <openarm/damiao_motor/dm_motor_device_collection.hpp>
 
@@ -105,12 +107,39 @@ void DMDeviceCollection::write_param_all(int RID, uint32_t value) {
 
 void DMDeviceCollection::send_command_to_device(std::shared_ptr<DMCANDevice> dm_device,
                                                 const CANPacket& packet) {
+    bool write_success = false;
+    write_total_count_++;
+
     if (can_socket_.is_canfd_enabled()) {
         canfd_frame frame = dm_device->create_canfd_frame(packet.send_can_id, packet.data);
-        can_socket_.write_canfd_frame(frame);
+        write_success = can_socket_.write_canfd_frame(frame);
+        if (!write_success) {
+            write_failure_count_++;
+            std::cerr << "ERROR: Failed to write CANFD frame to CAN ID 0x"
+                      << std::hex << packet.send_can_id << std::dec
+                      << " (errno: " << errno << " - " << strerror(errno) << ")"
+                      << " [failures: " << write_failure_count_
+                      << "/" << write_total_count_ << "]" << std::endl;
+        }
     } else {
         can_frame frame = dm_device->create_can_frame(packet.send_can_id, packet.data);
-        can_socket_.write_can_frame(frame);
+        write_success = can_socket_.write_can_frame(frame);
+        if (!write_success) {
+            write_failure_count_++;
+            std::cerr << "ERROR: Failed to write CAN frame to CAN ID 0x"
+                      << std::hex << packet.send_can_id << std::dec
+                      << " (errno: " << errno << " - " << strerror(errno) << ")"
+                      << " [failures: " << write_failure_count_
+                      << "/" << write_total_count_ << "]" << std::endl;
+        }
+    }
+
+    // Warn if failure rate exceeds 10%
+    if (write_total_count_ % 100 == 0 && write_failure_count_ > write_total_count_ / 10) {
+        std::cerr << "WARNING: High CAN write failure rate detected: "
+                  << write_failure_count_ << "/" << write_total_count_
+                  << " (" << (100.0 * write_failure_count_ / write_total_count_) << "%)"
+                  << " - possible bus contention or interface issues" << std::endl;
     }
 }
 

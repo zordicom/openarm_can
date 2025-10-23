@@ -65,6 +65,10 @@ protected:
     std::unique_ptr<CanPacketDecoder> can_packet_decoder_;
     std::unique_ptr<canbus::CANDeviceCollection> device_collection_;
 
+    // Write failure tracking
+    size_t write_failure_count_ = 0;
+    size_t write_total_count_ = 0;
+
     // Helper methods for subclasses
     void send_command_to_device(std::shared_ptr<DMCANDevice> dm_device, const CANPacket& packet);
     std::vector<std::shared_ptr<DMCANDevice>> get_dm_devices() const;

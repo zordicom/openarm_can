@@ -41,6 +41,7 @@ struct StateResult {
     double torque;
     int t_mos;
     int t_rotor;
+    uint8_t error_code;  // Motor error code from upper 4 bits of byte 0 (0x1 = no error)
     bool valid;
 };
 

@@ -29,7 +29,8 @@ Motor::Motor(MotorType motor_type, uint32_t send_can_id, uint32_t recv_can_id)
       state_dq_(0.0),
       state_tau_(0.0),
       state_tmos_(0),
-      state_trotor_(0) {}
+      state_trotor_(0),
+      state_error_(0x1) {}  // Initialize to no error
 
 // Enable methods
 void Motor::set_enabled(bool enable) { this->enabled_ = enable; }
@@ -45,12 +46,13 @@ double Motor::get_param(int RID) const {
 void Motor::set_temp_param(int RID, int val) { temp_param_dict_[RID] = val; }
 
 // State update methods
-void Motor::update_state(double q, double dq, double tau, int tmos, int trotor) {
+void Motor::update_state(double q, double dq, double tau, int tmos, int trotor, uint8_t error_code) {
     state_q_ = q;
     state_dq_ = dq;
     state_tau_ = tau;
     state_tmos_ = tmos;
     state_trotor_ = trotor;
+    state_error_ = error_code;
 }
 
 void Motor::set_state_tmos(int tmos) { state_tmos_ = tmos; }

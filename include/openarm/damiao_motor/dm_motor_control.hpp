@@ -58,12 +58,18 @@ struct MITParam {
     double tau;
 };
 
+struct PosVelParam {
+    double position;  // Target position in radians
+    double velocity;  // Target velocity in rad/s
+};
+
 class CanPacketEncoder {
 public:
     static CANPacket create_enable_command(const Motor& motor);
     static CANPacket create_disable_command(const Motor& motor);
     static CANPacket create_set_zero_command(const Motor& motor);
     static CANPacket create_mit_control_command(const Motor& motor, const MITParam& mit_param);
+    static CANPacket create_pos_vel_control_command(const Motor& motor, const PosVelParam& pos_vel_param);
     static CANPacket create_query_param_command(const Motor& motor, int RID);
     static CANPacket create_write_param_command(const Motor& motor, int RID, uint32_t value);
     static CANPacket create_refresh_command(const Motor& motor);
@@ -71,6 +77,7 @@ public:
 private:
     static std::vector<uint8_t> pack_mit_control_data(MotorType motor_type,
                                                       const MITParam& mit_param);
+    static std::vector<uint8_t> pack_pos_vel_control_data(const PosVelParam& pos_vel_param);
     static std::vector<uint8_t> pack_query_param_data(uint32_t send_can_id, int RID);
     static std::vector<uint8_t> pack_write_param_data(uint32_t send_can_id, int RID, uint32_t value);
     static std::vector<uint8_t> pack_command_data(uint8_t cmd);

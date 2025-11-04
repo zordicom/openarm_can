@@ -358,4 +358,18 @@ void DMDeviceCollection::log_motor_states() {
     }
 }
 
+void DMDeviceCollection::init_command_log(int motor_index, const std::string& cmd_type,
+                                          double kp, double kd, double q_cmd, double dq_cmd,
+                                          double tau_cmd) {
+    CommandLog cmd_log;
+    cmd_log.command_type = cmd_type;
+    cmd_log.kp = kp;
+    cmd_log.kd = kd;
+    cmd_log.q_cmd = q_cmd;
+    cmd_log.dq_cmd = dq_cmd;
+    cmd_log.tau_cmd = tau_cmd;
+    cmd_log.timestamp = std::chrono::steady_clock::now();
+    last_commands_[motor_index] = cmd_log;
+}
+
 }  // namespace openarm::damiao_motor

@@ -69,6 +69,8 @@ public:
     void enable_csv_logging(const std::string& log_directory = "", const std::string& name_prefix = "motor_log");
     void disable_csv_logging();
     void log_motor_states();
+    void init_command_log(int motor_index, const std::string& cmd_type, double kp, double kd,
+                          double q_cmd, double dq_cmd, double tau_cmd);
 
 protected:
     canbus::CANSocket& can_socket_;

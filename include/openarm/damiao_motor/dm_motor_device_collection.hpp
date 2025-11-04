@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <chrono>
+#include <fstream>
 #include <memory>
 #include <vector>
 
@@ -59,6 +61,11 @@ public:
     Motor get_motor(int i) const;
     canbus::CANDeviceCollection& get_device_collection() { return *device_collection_; }
 
+    // CSV logging control
+    void enable_csv_logging(const std::string& log_directory = "", const std::string& name_prefix = "motor_log");
+    void disable_csv_logging();
+    void log_motor_states();
+
 protected:
     canbus::CANSocket& can_socket_;
     std::unique_ptr<CanPacketEncoder> can_packet_encoder_;
@@ -69,8 +76,26 @@ protected:
     size_t write_failure_count_ = 0;
     size_t write_total_count_ = 0;
 
+    // CSV logging state
+    bool csv_logging_enabled_ = false;
+    std::ofstream csv_log_file_;
+    std::chrono::steady_clock::time_point csv_log_start_time_;
+    size_t csv_flush_counter_ = 0;
+
+    // Command tracking for logging (store last command sent to each motor)
+    struct CommandLog {
+        std::string command_type;  // "MIT", "POS_VEL", "REFRESH", etc.
+        double kp = 0.0, kd = 0.0, q_cmd = 0.0, dq_cmd = 0.0, tau_cmd = 0.0;
+        std::chrono::steady_clock::time_point timestamp;
+    };
+    std::map<int, CommandLog> last_commands_;  // motor index -> last command
+
     // Helper methods for subclasses
     void send_command_to_device(std::shared_ptr<DMCANDevice> dm_device, const CANPacket& packet);
     std::vector<std::shared_ptr<DMCANDevice>> get_dm_devices() const;
+
+    // CSV logging helpers
+    void log_command(int motor_index, const std::string& cmd_type, const MITParam* mit_param = nullptr,
+                     const PosVelParam* pos_vel_param = nullptr);
 };
 }  // namespace openarm::damiao_motor

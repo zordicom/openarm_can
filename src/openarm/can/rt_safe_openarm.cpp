@@ -241,6 +241,17 @@ size_t RTSafeOpenArm::receive_states_batch_rt(damiao_motor::StateResult* states,
         if (can_id < recv_id_to_motor_index_.size()) {
             int motor_idx = recv_id_to_motor_index_[can_id];
             if (motor_idx >= 0 && motor_idx < static_cast<int>(motor_count_) && motors_[motor_idx]) {
+                // Check if this is a parameter response (not motor state)
+                // Parameter responses have format: [can_id_lo] [can_id_hi] [cmd] [rid] [data...]
+                // cmd = 0x33 (query response) or 0x55 (write response)
+                if (rx_frames_[i].can_dlc >= 3) {
+                    uint8_t cmd = rx_frames_[i].data[2];
+                    if (cmd == 0x33 || cmd == 0x55) {
+                        // This is a parameter response, skip it (don't decode as motor state)
+                        continue;
+                    }
+                }
+
                 // Decode state for this motor
                 if (decode_motor_state(*motors_[motor_idx], rx_frames_[i], states[motor_idx])) {
                     valid_states++;

@@ -102,6 +102,15 @@ public:
     size_t refresh_all_motors_rt(int timeout_us = 500);
 
     /**
+     * @brief Write parameter to all motors (RT-safe)
+     * @param rid Parameter ID from RID enum
+     * @param value Parameter value
+     * @param timeout_us Timeout in microseconds
+     * @return Number of parameter write commands successfully sent
+     */
+    size_t write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value, int timeout_us = 500);
+
+    /**
      * @brief Send MIT control commands to all motors (RT-safe batch)
      * @param params Array of MIT parameters for each motor
      * @param count Number of motors to command

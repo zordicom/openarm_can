@@ -46,10 +46,9 @@ public:
     /**
      * @brief Initialize the RT-safe OpenArm interface (call from non-RT context)
      * @param can_interface CAN interface name (e.g., "can0")
-     * @param use_canfd Enable CAN-FD support
      * @return true if initialization successful
      */
-    bool init(const std::string& can_interface, bool use_canfd = false);
+    bool init(const std::string& can_interface);
 
     /**
      * @brief Close the CAN interface

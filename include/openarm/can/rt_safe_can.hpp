@@ -46,7 +46,7 @@ public:
     /**
      * @brief Initialize CAN socket (call from non-RT context)
      */
-    bool init(const std::string& interface, bool use_canfd = false);
+    bool init(const std::string& interface);
 
     /**
      * @brief Close CAN socket
@@ -60,7 +60,6 @@ public:
      * @return true if frame was sent, false on timeout or error
      */
     bool try_write(const can_frame& frame, int timeout_us = 0);
-    bool try_write(const canfd_frame& frame, int timeout_us = 0);
 
     /**
      * @brief Non-blocking read with timeout
@@ -69,7 +68,6 @@ public:
      * @return true if frame was received, false on timeout or no data
      */
     bool try_read(can_frame& frame, int timeout_us = 0);
-    bool try_read(canfd_frame& frame, int timeout_us = 0);
 
     /**
      * @brief Batch write multiple frames (RT-safe)
@@ -79,7 +77,6 @@ public:
      * @return Number of frames successfully sent
      */
     size_t write_batch(const can_frame* frames, size_t count, int timeout_us = 0);
-    size_t write_batch(const canfd_frame* frames, size_t count, int timeout_us = 0);
 
     /**
      * @brief Batch read multiple frames (RT-safe)
@@ -89,7 +86,6 @@ public:
      * @return Number of frames successfully read
      */
     size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0);
-    size_t read_batch(canfd_frame* frames, size_t max_count, int timeout_us = 0);
 
     /**
      * @brief Check if socket is initialized and ready
@@ -113,7 +109,6 @@ public:
 
 private:
     int socket_fd_ = -1;
-    bool use_canfd_ = false;
     int last_error_ = 0;
 
     // Pre-allocated pollfd for RT-safe polling

@@ -19,10 +19,10 @@
 
 namespace openarm::can {
 
-bool RTSafeOpenArm::init(const std::string& can_interface, bool use_canfd) {
+bool RTSafeOpenArm::init(const std::string& can_interface) {
     // Initialize CAN socket
     can_socket_ = std::make_unique<RTSafeCANSocket>();
-    if (!can_socket_->init(can_interface, use_canfd)) {
+    if (!can_socket_->init(can_interface)) {
         last_error_ = can_socket_->get_last_error();
         return false;
     }

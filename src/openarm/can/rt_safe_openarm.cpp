@@ -143,6 +143,42 @@ size_t RTSafeOpenArm::refresh_all_motors_rt(int timeout_us) {
     return can_socket_->write_batch(tx_frames_.data(), sent, timeout_us);
 }
 
+size_t RTSafeOpenArm::write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value, int timeout_us) {
+    if (!can_socket_ || !can_socket_->is_ready()) {
+        return 0;
+    }
+
+    size_t sent = 0;
+    for (size_t i = 0; i < motor_count_; ++i) {
+        if (motors_[i]) {
+            // Parameter write uses special CAN ID 0x7FF
+            // Format: [can_id_lo] [can_id_hi] 0x55 [RID] [value bytes 0-3 little-endian]
+            can_frame& frame = tx_frames_[sent];
+            frame.can_id = 0x7FF;  // Special command CAN ID
+            frame.can_dlc = 8;
+
+            // Get motor's send CAN ID and split into low and high bytes
+            uint32_t motor_can_id = motors_[i]->get_send_can_id();
+            uint8_t can_id_lo = motor_can_id & 0xFF;        // Low 8 bits
+            uint8_t can_id_hi = (motor_can_id >> 8) & 0xFF;  // High 8 bits
+
+            frame.data[0] = can_id_lo;                      // CAN ID low byte
+            frame.data[1] = can_id_hi;                      // CAN ID high byte
+            frame.data[2] = 0x55;                           // Write param command
+            frame.data[3] = static_cast<uint8_t>(rid);      // Parameter ID
+            frame.data[4] = (value >> 0) & 0xFF;            // Value byte 0 (LSB)
+            frame.data[5] = (value >> 8) & 0xFF;            // Value byte 1
+            frame.data[6] = (value >> 16) & 0xFF;           // Value byte 2
+            frame.data[7] = (value >> 24) & 0xFF;           // Value byte 3 (MSB)
+
+            sent++;
+        }
+    }
+
+    // Send batch
+    return can_socket_->write_batch(tx_frames_.data(), sent, timeout_us);
+}
+
 size_t RTSafeOpenArm::send_mit_batch_rt(const damiao_motor::MITParam* params,
                                         size_t count,
                                         int timeout_us) {
@@ -217,31 +253,18 @@ size_t RTSafeOpenArm::receive_states_batch_rt(damiao_motor::StateResult* states,
 }
 
 bool RTSafeOpenArm::set_mode_all_rt(ControlMode mode, int timeout_us) {
-    // Mode switching typically requires specific command sequences
-    // This is a simplified version - actual implementation may need more logic
+    // DEPRECATED: Mode switching is now done via write_param_all_rt
+    // with RID::CTRL_MODE parameter
+    // This function is kept for compatibility but should not be used
 
-    uint8_t cmd = 0;
-    switch (mode) {
-        case ControlMode::MIT:
-            cmd = 1;  // MIT mode command
-            break;
-        case ControlMode::POSITION_VELOCITY:
-            cmd = 2;  // Position/velocity mode command
-            break;
-        default:
-            return false;
-    }
+    // Mode values: 1 = MIT, 2 = POSITION_VELOCITY
+    uint32_t mode_value = (mode == ControlMode::MIT) ? 1 : 2;
 
-    size_t sent = 0;
-    for (size_t i = 0; i < motor_count_; ++i) {
-        if (motors_[i] && encode_simple_command(*motors_[i], cmd, tx_frames_[i])) {
-            sent++;
-        }
-    }
+    // Use the proper parameter write method
+    size_t written = write_param_all_rt(
+        openarm::damiao_motor::RID::CTRL_MODE, mode_value, timeout_us);
 
-    // Send batch
-    size_t success = can_socket_->write_batch(tx_frames_.data(), sent, timeout_us);
-    return success == motor_count_;
+    return written == motor_count_;
 }
 
 bool RTSafeOpenArm::encode_mit_command(const damiao_motor::Motor& motor,

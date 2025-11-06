@@ -23,30 +23,17 @@ namespace openarm::can {
 
 RTSafeCANSocket::~RTSafeCANSocket() { close(); }
 
-bool RTSafeCANSocket::init(const std::string& interface, bool use_canfd) {
+bool RTSafeCANSocket::init(const std::string& interface) {
     // Close existing socket if open
     if (socket_fd_ >= 0) {
         close();
     }
-
-    use_canfd_ = use_canfd;
 
     // Create socket
     socket_fd_ = ::socket(PF_CAN, SOCK_RAW, CAN_RAW);
     if (socket_fd_ < 0) {
         last_error_ = errno;
         return false;
-    }
-
-    // Enable CAN-FD if requested
-    if (use_canfd) {
-        int enable = 1;
-        if (setsockopt(socket_fd_, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &enable, sizeof(enable)) < 0) {
-            last_error_ = errno;
-            ::close(socket_fd_);
-            socket_fd_ = -1;
-            return false;
-        }
     }
 
     // Get interface index
@@ -138,29 +125,7 @@ bool RTSafeCANSocket::wait_for_io(short events, int timeout_us) {
 }
 
 bool RTSafeCANSocket::try_write(const can_frame& frame, int timeout_us) {
-    if (socket_fd_ < 0 || use_canfd_) {
-        return false;
-    }
-
-    // Check if socket is ready for writing
-    if (timeout_us > 0 && !wait_for_io(POLLOUT, timeout_us)) {
-        return false;
-    }
-
-    ssize_t bytes = ::write(socket_fd_, &frame, sizeof(frame));
-    if (bytes < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return false;  // Would block, not an error
-        }
-        last_error_ = errno;
-        return false;
-    }
-
-    return bytes == sizeof(frame);
-}
-
-bool RTSafeCANSocket::try_write(const canfd_frame& frame, int timeout_us) {
-    if (socket_fd_ < 0 || !use_canfd_) {
+    if (socket_fd_ < 0) {
         return false;
     }
 
@@ -182,7 +147,7 @@ bool RTSafeCANSocket::try_write(const canfd_frame& frame, int timeout_us) {
 }
 
 bool RTSafeCANSocket::try_read(can_frame& frame, int timeout_us) {
-    if (socket_fd_ < 0 || use_canfd_) {
+    if (socket_fd_ < 0) {
         return false;
     }
 
@@ -201,28 +166,6 @@ bool RTSafeCANSocket::try_read(can_frame& frame, int timeout_us) {
     }
 
     return bytes == sizeof(frame);
-}
-
-bool RTSafeCANSocket::try_read(canfd_frame& frame, int timeout_us) {
-    if (socket_fd_ < 0 || !use_canfd_) {
-        return false;
-    }
-
-    // Check if data is available
-    if (timeout_us > 0 && !wait_for_io(POLLIN, timeout_us)) {
-        return false;
-    }
-
-    ssize_t bytes = ::read(socket_fd_, &frame, sizeof(frame));
-    if (bytes < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return false;  // No data available, not an error
-        }
-        last_error_ = errno;
-        return false;
-    }
-
-    return bytes > 0;  // CAN-FD frames can have variable size
 }
 
 size_t RTSafeCANSocket::write_batch(const can_frame* frames, size_t count, int timeout_us) {
@@ -255,67 +198,7 @@ size_t RTSafeCANSocket::write_batch(const can_frame* frames, size_t count, int t
     return sent;
 }
 
-size_t RTSafeCANSocket::write_batch(const canfd_frame* frames, size_t count, int timeout_us) {
-    if (!frames || count == 0) {
-        return 0;
-    }
-
-    size_t sent = 0;
-    auto start_time = std::chrono::steady_clock::now();
-
-    for (size_t i = 0; i < count; ++i) {
-        int remaining_timeout = 0;
-        if (timeout_us > 0) {
-            auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-                               std::chrono::steady_clock::now() - start_time)
-                               .count();
-            remaining_timeout = timeout_us - elapsed;
-            if (remaining_timeout <= 0) {
-                break;  // Timeout
-            }
-        }
-
-        if (try_write(frames[i], remaining_timeout)) {
-            ++sent;
-        } else {
-            break;  // Failed to send
-        }
-    }
-
-    return sent;
-}
-
 size_t RTSafeCANSocket::read_batch(can_frame* frames, size_t max_count, int timeout_us) {
-    if (!frames || max_count == 0) {
-        return 0;
-    }
-
-    size_t received = 0;
-    auto start_time = std::chrono::steady_clock::now();
-
-    for (size_t i = 0; i < max_count; ++i) {
-        int remaining_timeout = 0;
-        if (timeout_us > 0) {
-            auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-                               std::chrono::steady_clock::now() - start_time)
-                               .count();
-            remaining_timeout = timeout_us - elapsed;
-            if (remaining_timeout <= 0) {
-                break;  // Timeout
-            }
-        }
-
-        if (try_read(frames[i], remaining_timeout)) {
-            ++received;
-        } else {
-            break;  // No more frames available
-        }
-    }
-
-    return received;
-}
-
-size_t RTSafeCANSocket::read_batch(canfd_frame* frames, size_t max_count, int timeout_us) {
     if (!frames || max_count == 0) {
         return 0;
     }

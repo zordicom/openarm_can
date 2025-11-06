@@ -237,7 +237,7 @@ bool RTSafeOpenArm::encode_simple_command(const damiao_motor::Motor& motor,
     damiao_motor::CANPacket packet;
     packet.send_can_id = motor.get_send_can_id();
     packet.data.resize(8, 0xFF);  // Fill with 0xFF as per protocol
-    packet.data[0] = cmd;
+    packet.data[7] = cmd;  // Command byte goes at the END (index 7)
 
     // Convert to CAN frame
     packet_to_frame(packet, frame);

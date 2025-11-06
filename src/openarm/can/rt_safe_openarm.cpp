@@ -163,8 +163,8 @@ size_t RTSafeOpenArm::receive_states_batch_rt(damiao_motor::StateResult* states,
 
     // Decode received frames
     for (size_t i = 0; i < received; ++i) {
-        // Find motor index from CAN ID
-        uint32_t can_id = rx_frames_[i].can_id & CAN_EFF_MASK;
+        // Find motor index from CAN ID (standard 11-bit IDs)
+        uint32_t can_id = rx_frames_[i].can_id & CAN_SFF_MASK;
 
         if (can_id < recv_id_to_motor_index_.size()) {
             int motor_idx = recv_id_to_motor_index_[can_id];
@@ -257,7 +257,7 @@ bool RTSafeOpenArm::decode_motor_state(const damiao_motor::Motor& motor,
 }
 
 void RTSafeOpenArm::packet_to_frame(const damiao_motor::CANPacket& packet, can_frame& frame) {
-    frame.can_id = packet.send_can_id | CAN_EFF_FLAG;  // Extended frame
+    frame.can_id = packet.send_can_id;  // Standard frame (11-bit ID)
     frame.can_dlc = std::min(packet.data.size(), size_t(8));
 
     // Copy data

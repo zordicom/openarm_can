@@ -28,6 +28,24 @@ include(CTest)
 
 include(GNUInstallDirs)
 
+# Create the RT-safe library
+add_library(
+  rt_safe_can
+  src/openarm/can/rt_safe_can.cpp
+  src/openarm/can/rt_safe_openarm.cpp
+  src/openarm/damiao_motor/dm_motor.cpp
+  src/openarm/damiao_motor/dm_motor_control.cpp)
+
+set_target_properties(
+  rt_safe_can
+  PROPERTIES POSITION_INDEPENDENT_CODE ON
+             VERSION ${PROJECT_VERSION}
+             SOVERSION ${PROJECT_VERSION_MAJOR})
+
+target_include_directories(
+  rt_safe_can PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                     $<INSTALL_INTERFACE:include>)
+
 # Create the main library
 add_library(
   openarm_can
@@ -80,7 +98,7 @@ else()
   target_include_directories(
     openarm_can PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                        $<INSTALL_INTERFACE:include>)
-  install(TARGETS openarm_can EXPORT openarm_can_export)
+  install(TARGETS openarm_can rt_safe_can EXPORT openarm_can_export)
   install(DIRECTORY include/openarm TYPE INCLUDE)
 endif()
 

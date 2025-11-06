@@ -107,6 +107,42 @@ size_t RTSafeOpenArm::set_zero_all_motors_rt(int timeout_us) {
     return can_socket_->write_batch(tx_frames_.data(), sent, timeout_us);
 }
 
+size_t RTSafeOpenArm::refresh_all_motors_rt(int timeout_us) {
+    if (!can_socket_ || !can_socket_->is_ready()) {
+        return 0;
+    }
+
+    size_t sent = 0;
+    for (size_t i = 0; i < motor_count_; ++i) {
+        if (motors_[i]) {
+            // Refresh command uses special CAN ID 0x7FF
+            // Format: [can_id_lo] [can_id_hi] CC 00 00 00 00 00
+            can_frame& frame = tx_frames_[sent];
+            frame.can_id = 0x7FF;  // Special refresh CAN ID
+            frame.can_dlc = 8;
+
+            // Get motor's send CAN ID and split into low and high bytes
+            uint32_t motor_can_id = motors_[i]->get_send_can_id();
+            uint8_t can_id_lo = motor_can_id & 0xFF;        // Low 8 bits
+            uint8_t can_id_hi = (motor_can_id >> 8) & 0xFF;  // High 8 bits
+
+            frame.data[0] = can_id_lo;   // CAN ID low byte
+            frame.data[1] = can_id_hi;   // CAN ID high byte
+            frame.data[2] = 0xCC;         // Refresh command identifier
+            frame.data[3] = 0x00;
+            frame.data[4] = 0x00;
+            frame.data[5] = 0x00;
+            frame.data[6] = 0x00;
+            frame.data[7] = 0x00;
+
+            sent++;
+        }
+    }
+
+    // Send batch
+    return can_socket_->write_batch(tx_frames_.data(), sent, timeout_us);
+}
+
 size_t RTSafeOpenArm::send_mit_batch_rt(const damiao_motor::MITParam* params,
                                         size_t count,
                                         int timeout_us) {

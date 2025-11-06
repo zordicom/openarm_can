@@ -95,6 +95,13 @@ public:
     size_t set_zero_all_motors_rt(int timeout_us = 500);
 
     /**
+     * @brief Send refresh/state request to all motors (RT-safe)
+     * @param timeout_us Timeout in microseconds
+     * @return Number of refresh commands successfully sent
+     */
+    size_t refresh_all_motors_rt(int timeout_us = 500);
+
+    /**
      * @brief Send MIT control commands to all motors (RT-safe batch)
      * @param params Array of MIT parameters for each motor
      * @param count Number of motors to command

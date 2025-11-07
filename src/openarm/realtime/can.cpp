@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <fcntl.h>
+#include <poll.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -65,6 +66,22 @@ bool CANSocket::init(const std::string& interface) {
         return false;
     }
 
+    // Increase socket buffer sizes to prevent drops during burst I/O
+    // TX buffer: Need room for at least 8 frames (8 motors) + margin
+    // RX buffer: Need room for responses that arrive while we're sending
+    int tx_buf_size = 65536;  // 64KB
+    int rx_buf_size = 65536;  // 64KB
+
+    if (setsockopt(socket_fd_, SOL_SOCKET, SO_SNDBUF, &tx_buf_size, sizeof(tx_buf_size)) < 0) {
+        last_errno_ = errno;
+        // Non-fatal, continue
+    }
+
+    if (setsockopt(socket_fd_, SOL_SOCKET, SO_RCVBUF, &rx_buf_size, sizeof(rx_buf_size)) < 0) {
+        last_errno_ = errno;
+        // Non-fatal, continue
+    }
+
     // Set non-blocking mode for RT safety
     int flags = fcntl(socket_fd_, F_GETFL, 0);
     if (flags < 0) {
@@ -89,57 +106,105 @@ void CANSocket::close() {
     }
 }
 
-bool CANSocket::try_write(const can_frame& frame) {
+bool CANSocket::try_write(const can_frame& frame, int timeout_us) {
     if (socket_fd_ < 0) {
         return false;
     }
 
-    // Single write attempt - fail fast if TX buffer is full (RT-safe, no spinning)
-    ssize_t n = ::write(socket_fd_, &frame, sizeof(frame));
-    if (n == sizeof(frame)) {
-        return true;  // Success
-    }
+    auto start = steady_clock::now();
 
-    if (n < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            // TX buffer full - fail immediately instead of spinning
-            return false;
+    while (true) {
+        // Try to write immediately
+        ssize_t n = ::write(socket_fd_, &frame, sizeof(frame));
+        if (n == sizeof(frame)) {
+            return true;  // Success
+        }
+
+        if (n < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // TX buffer full - wait for space with ppoll
+                auto elapsed = duration_cast<microseconds>(steady_clock::now() - start).count();
+                if (elapsed >= timeout_us) {
+                    return false;  // Timeout
+                }
+
+                // Wait for socket to be writable
+                struct pollfd pfd;
+                pfd.fd = socket_fd_;
+                pfd.events = POLLOUT;
+                pfd.revents = 0;
+
+                struct timespec timeout;
+                int64_t remaining_us = timeout_us - elapsed;
+                timeout.tv_sec = remaining_us / 1000000;
+                timeout.tv_nsec = (remaining_us % 1000000) * 1000;
+
+                int ret = ppoll(&pfd, 1, &timeout, nullptr);
+                if (ret <= 0) {
+                    // Timeout or error
+                    return false;
+                }
+                // Loop and try write again
+            } else {
+                last_errno_ = errno;
+                return false;
+            }
         } else {
-            last_errno_ = errno;
+            // Partial write, shouldn't happen. Indicates error (see socketcan kernel documentation)
             return false;
         }
-    } else {
-        // Partial write, shouldn't happen. Indicates error (see socketcan kernel documentation)
-        return false;
     }
 }
 
-bool CANSocket::try_read(can_frame& frame) {
+bool CANSocket::try_read(can_frame& frame, int timeout_us) {
     if (socket_fd_ < 0) {
         return false;
     }
 
-    // Single read attempt - fail fast if no data available (RT-safe, no spinning)
-    ssize_t n = ::read(socket_fd_, &frame, sizeof(frame));
+    auto start = steady_clock::now();
 
-    if (n == sizeof(frame)) {
-        return true;
-    }
+    while (true) {
+        // Try to read immediately
+        ssize_t n = ::read(socket_fd_, &frame, sizeof(frame));
 
-    if (n < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            // No data available - fail immediately instead of spinning
-            return false;
-        } else {
-            last_errno_ = errno;
+        if (n == sizeof(frame)) {
+            return true;
+        }
+
+        if (n < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // No data available - wait for data with ppoll
+                auto elapsed = duration_cast<microseconds>(steady_clock::now() - start).count();
+                if (elapsed >= timeout_us) {
+                    return false;  // Timeout
+                }
+
+                // Wait for socket to be readable
+                struct pollfd pfd;
+                pfd.fd = socket_fd_;
+                pfd.events = POLLIN;
+                pfd.revents = 0;
+
+                struct timespec timeout;
+                int64_t remaining_us = timeout_us - elapsed;
+                timeout.tv_sec = remaining_us / 1000000;
+                timeout.tv_nsec = (remaining_us % 1000000) * 1000;
+
+                int ret = ppoll(&pfd, 1, &timeout, nullptr);
+                if (ret <= 0) {
+                    // Timeout or error
+                    return false;
+                }
+                // Loop and try read again
+            } else {
+                last_errno_ = errno;
+                return false;
+            }
+        } else if (n < static_cast<ssize_t>(sizeof(frame))) {
+            // Partial read, shouldn't happen. Indicates error (see socketcan kernel documentation)
             return false;
         }
-    } else if (n < static_cast<ssize_t>(sizeof(frame))) {
-        // Partial read, shouldn't happen. Indicates error (see socketcan kernel documentation)
-        return false;
     }
-
-    return false;
 }
 
 size_t CANSocket::write_batch(const can_frame* frames, size_t count, int timeout_us) {
@@ -151,18 +216,20 @@ size_t CANSocket::write_batch(const can_frame* frames, size_t count, int timeout
     auto start_time = steady_clock::now();
 
     for (size_t i = 0; i < count; ++i) {
-        // Check global timeout if specified
+        // Calculate remaining timeout for this frame
+        int remaining_timeout = 0;
         if (timeout_us > 0) {
             auto elapsed = duration_cast<microseconds>(steady_clock::now() - start_time).count();
-            if (elapsed >= timeout_us) {
-                break;  // Timeout
+            remaining_timeout = timeout_us - elapsed;
+            if (remaining_timeout <= 0) {
+                break;  // Global timeout exceeded
             }
         }
 
-        if (try_write(frames[i])) {
+        if (try_write(frames[i], remaining_timeout)) {
             ++sent;
         } else {
-            break;  // Failed to send (TX buffer full)
+            break;  // Failed to send within timeout
         }
     }
 
@@ -178,18 +245,20 @@ size_t CANSocket::read_batch(can_frame* frames, size_t max_count, int timeout_us
     auto start_time = steady_clock::now();
 
     for (size_t i = 0; i < max_count; ++i) {
-        // Check global timeout if specified
+        // Calculate remaining timeout for this frame
+        int remaining_timeout = 0;
         if (timeout_us > 0) {
             auto elapsed = duration_cast<microseconds>(steady_clock::now() - start_time).count();
-            if (elapsed >= timeout_us) {
-                break;  // Timeout
+            remaining_timeout = timeout_us - elapsed;
+            if (remaining_timeout <= 0) {
+                break;  // Global timeout exceeded
             }
         }
 
-        if (try_read(frames[i])) {
+        if (try_read(frames[i], remaining_timeout)) {
             ++received;
         } else {
-            break;  // No more frames available (RX buffer empty)
+            break;  // No more frames available within timeout
         }
     }
 

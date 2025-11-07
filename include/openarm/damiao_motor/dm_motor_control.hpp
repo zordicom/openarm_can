@@ -59,8 +59,8 @@ struct MITParam {
 };
 
 struct PosVelParam {
-    double position;  // Target position in radians
-    double velocity;  // Target velocity in rad/s
+    double q;   // rad
+    double dq;  // Target velocity in rad/s
 };
 
 class CanPacketEncoder {
@@ -69,7 +69,8 @@ public:
     static CANPacket create_disable_command(const Motor& motor);
     static CANPacket create_set_zero_command(const Motor& motor);
     static CANPacket create_mit_control_command(const Motor& motor, const MITParam& mit_param);
-    static CANPacket create_pos_vel_control_command(const Motor& motor, const PosVelParam& pos_vel_param);
+    static CANPacket create_pos_vel_control_command(const Motor& motor,
+                                                    const PosVelParam& pos_vel_param);
     static CANPacket create_query_param_command(const Motor& motor, int RID);
     static CANPacket create_write_param_command(const Motor& motor, int RID, uint32_t value);
     static CANPacket create_refresh_command(const Motor& motor);
@@ -79,7 +80,8 @@ private:
                                                       const MITParam& mit_param);
     static std::vector<uint8_t> pack_pos_vel_control_data(const PosVelParam& pos_vel_param);
     static std::vector<uint8_t> pack_query_param_data(uint32_t send_can_id, int RID);
-    static std::vector<uint8_t> pack_write_param_data(uint32_t send_can_id, int RID, uint32_t value);
+    static std::vector<uint8_t> pack_write_param_data(uint32_t send_can_id, int RID,
+                                                      uint32_t value);
     static std::vector<uint8_t> pack_command_data(uint8_t cmd);
 
     static double limit_min_max(double x, double min, double max);
@@ -89,6 +91,7 @@ private:
 class CanPacketDecoder {
 public:
     static StateResult parse_motor_state_data(const Motor& motor, const std::vector<uint8_t>& data);
+    static StateResult parse_motor_state_data(const Motor& motor, const uint8_t* data, size_t len);
     static ParamResult parse_motor_param_data(const std::vector<uint8_t>& data);
 
 private:

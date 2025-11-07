@@ -31,8 +31,8 @@ include(GNUInstallDirs)
 # Create the RT-safe library
 add_library(
   rt_safe_can
-  src/openarm/can/rt_safe_can.cpp
-  src/openarm/can/rt_safe_openarm.cpp
+  src/openarm/realtime/can.cpp
+  src/openarm/realtime/openarm.cpp
   src/openarm/damiao_motor/dm_motor.cpp
   src/openarm/damiao_motor/dm_motor_control.cpp)
 

@@ -12,31 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef OPENARM_CAN__RT_SAFE_CAN_HPP_
-#define OPENARM_CAN__RT_SAFE_CAN_HPP_
+#ifndef OPENARM_REALTIME_CAN_HPP_
+#define OPENARM_REALTIME_CAN_HPP_
 
+#include <errno.h>
 #include <linux/can.h>
 #include <linux/can/raw.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-#include <poll.h>
-#include <errno.h>
 
 #include <array>
 #include <atomic>
 #include <chrono>
 #include <vector>
 
-namespace openarm::can {
+namespace openarm::realtime::can {
 
 // RT-safe CAN communication with non-blocking operations and no dynamic allocation.
-class RTSafeCANSocket {
+class CANSocket {
 public:
     static constexpr size_t MAX_PENDING_FRAMES = 64;
 
-    RTSafeCANSocket() = default;
-    ~RTSafeCANSocket();
+    CANSocket() = default;
+    ~CANSocket();
 
     // Initialize CAN socket (call from non-RT context).
     bool init(const std::string& interface);
@@ -59,31 +58,19 @@ public:
     // Check if socket is initialized and ready.
     bool is_ready() const { return socket_fd_ >= 0; }
 
-    // Get socket file descriptor for advanced usage.
-    int get_fd() const { return socket_fd_; }
-
-    // Set socket to non-blocking mode.
-    bool set_non_blocking(bool enable = true);
-
-    // Get error code from last operation.
-    int get_last_error() const { return last_error_; }
+    // Get errno from last failed operation (only set during init).
+    int get_last_errno() const { return last_errno_; }
 
 private:
     int socket_fd_ = -1;
-    int last_error_ = 0;
-
-    // Pre-allocated pollfd for RT-safe polling
-    struct pollfd poll_fd_;
-
-    // Wait for socket to be ready for I/O (events: POLLIN for read, POLLOUT for write).
-    bool wait_for_io(short events, int timeout_us);
+    int last_errno_ = 0;
 };
 
 // Lock-free single-producer single-consumer ring buffer for CAN frames.
-template<typename FrameType, size_t Size>
-class RTSafeCANBuffer {
+template <typename FrameType, size_t Size>
+class CANBuffer {
 public:
-    RTSafeCANBuffer() : head_(0), tail_(0) {}
+    CANBuffer() : head_(0), tail_(0) {}
 
     // Try to push a frame (non-blocking). Returns false if buffer full.
     bool try_push(const FrameType& frame) {
@@ -110,8 +97,7 @@ public:
     }
 
     bool empty() const {
-        return tail_.load(std::memory_order_acquire) ==
-               head_.load(std::memory_order_acquire);
+        return tail_.load(std::memory_order_acquire) == head_.load(std::memory_order_acquire);
     }
 
     bool full() const {
@@ -131,6 +117,6 @@ private:
     std::atomic<size_t> tail_;
 };
 
-} // namespace openarm::can
+}  // namespace openarm::realtime::can
 
-#endif // OPENARM_CAN__RT_SAFE_CAN_HPP_
+#endif  // OPENARM_REALTIME_CAN_HPP_

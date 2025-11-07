@@ -56,13 +56,14 @@ int OpenArm::add_motor(damiao_motor::MotorType motor_type, uint32_t send_can_id,
 
     recv_id_to_motor_index_[recv_can_id] = motor_count_;
 
+    // Pre-allocate commands that don't change.
     encode_simple_command(*motor, 0xFC, tx_enable_[motor_count_]);
     encode_simple_command(*motor, 0xFD, tx_disable_[motor_count_]);
     encode_simple_command(*motor, 0xFE, tx_zero_[motor_count_]);
 
     can_frame& frame = tx_refresh_[motor_count_];
     std::memset(&frame, 0, sizeof(frame));
-    frame.can_id = 0x7FF;  // Special refresh CAN ID
+    frame.can_id = 0x7FF;
     frame.can_dlc = 8;
     frame.data[0] = motor->get_send_can_id() & 0xFF;         // CAN ID low byte
     frame.data[1] = (motor->get_send_can_id() >> 8) & 0xFF;  // CAN ID high byte
@@ -112,19 +113,15 @@ size_t OpenArm::write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t valu
     }
 
     for (size_t i = 0; i < motor_count_; ++i) {
-        // Parameter write uses special CAN ID 0x7FF
-        // Format: [can_id_lo] [can_id_hi] 0x55 [RID] [value bytes 0-3 little-endian]
         can_frame& frame = tx_cmd_[i];
-        frame.can_id = 0x7FF;  // Special command CAN ID
+        frame.can_id = 0x7FF;
         frame.can_dlc = 8;
 
         // Get motor's send CAN ID and split into low and high bytes
-        uint32_t motor_can_id = motors_[i]->get_send_can_id();
-        uint8_t can_id_lo = motor_can_id & 0xFF;         // Low 8 bits
-        uint8_t can_id_hi = (motor_can_id >> 8) & 0xFF;  // High 8 bits
+        uint32_t m_can_id = motors_[i]->get_send_can_id();
 
-        frame.data[0] = can_id_lo;                  // CAN ID low byte
-        frame.data[1] = can_id_hi;                  // CAN ID high byte
+        frame.data[0] = m_can_id & 0xFF;            // CAN ID low byte
+        frame.data[1] = (m_can_id >> 8) & 0xFF;     // CAN ID high byte
         frame.data[2] = 0x55;                       // Write param command
         frame.data[3] = static_cast<uint8_t>(rid);  // Parameter ID
         frame.data[4] = (value >> 0) & 0xFF;        // Value byte 0 (LSB)
@@ -179,41 +176,44 @@ size_t OpenArm::receive_states_batch_rt(damiao_motor::StateResult* states, size_
         return 0;
     }
 
-    // Receive CAN frames
-    size_t received =
-        can_socket_->read_batch(rx_frames_.data(), std::min(max_count, MAX_CAN_FRAMES), timeout_us);
-
-    size_t valid_states = 0;
-
-    // Decode received frames
-    for (size_t i = 0; i < received; ++i) {
-        // Find motor index from CAN ID (standard 11-bit IDs)
-        uint32_t can_id = rx_frames_[i].can_id & CAN_SFF_MASK;
-
-        if (can_id < recv_id_to_motor_index_.size()) {
-            int motor_idx = recv_id_to_motor_index_[can_id];
-            if (motor_idx >= 0 && motor_idx < static_cast<int>(motor_count_) &&
-                motors_[motor_idx]) {
-                // Check if this is a parameter response (not motor state)
-                // Parameter responses have format: [can_id_lo] [can_id_hi] [cmd] [rid] [data...]
-                // cmd = 0x33 (query response) or 0x55 (write response)
-                if (rx_frames_[i].can_dlc >= 3) {
-                    uint8_t cmd = rx_frames_[i].data[2];
-                    if (cmd == 0x33 || cmd == 0x55) {
-                        // This is a parameter response, skip it (don't decode as motor state)
-                        continue;
-                    }
-                }
-
-                // Decode state for this motor
-                if (decode_motor_state(*motors_[motor_idx], rx_frames_[i], states[motor_idx])) {
-                    valid_states++;
-                }
-            }
-        }
+    for (size_t i = 0; i < std::min(max_count, motor_count_); ++i) {
+        states[i].valid = false;
     }
 
-    return valid_states;
+    // Receive CAN frames
+    size_t n =
+        can_socket_->read_batch(rx_frames_.data(), std::min(max_count, MAX_CAN_FRAMES), timeout_us);
+
+    // Decode received frames
+    for (size_t i = 0; i < n; ++i) {
+        // Find motor index from CAN ID (standard 11-bit IDs)
+        uint32_t can_id = rx_frames_[i].can_id & CAN_SFF_MASK;
+        if (can_id >= recv_id_to_motor_index_.size()) {
+            // out of bounds
+            continue;
+        }
+
+        int midx = recv_id_to_motor_index_[can_id];
+        if (midx < 0 || midx >= static_cast<int>(motor_count_)) {
+            // out of bounds or not configured
+            continue;
+        }
+
+        const can_frame& rx = rx_frames_[i];
+
+        // Check if this is a parameter response (not motor state)
+        // Parameter responses have format: [can_id_lo] [can_id_hi] [cmd] [rid] [data...]
+        // cmd = 0x33 (query response) or 0x55 (write response)
+        if (rx.can_dlc >= 3 && (rx.data[2] == 0x33 || rx.data[2] == 0x55)) {
+            // This is a parameter response, skip it (don't decode as motor state)
+            continue;
+        }
+
+        states[midx] = damiao_motor::CanPacketDecoder::parse_motor_state_data(
+            *motors_[midx], rx.data, rx.can_dlc);
+    }
+
+    return n;
 }
 
 bool OpenArm::set_mode_all_rt(ControlMode mode, int timeout_us) {
@@ -238,14 +238,6 @@ void OpenArm::encode_simple_command(const damiao_motor::Motor& motor, uint8_t cm
 
     // Convert to CAN frame
     packet_to_frame(packet, frame);
-}
-
-bool OpenArm::decode_motor_state(const damiao_motor::Motor& motor, const can_frame& frame,
-                                 damiao_motor::StateResult& state) {
-    // Use the RT-safe raw pointer API - no allocation
-    state =
-        damiao_motor::CanPacketDecoder::parse_motor_state_data(motor, frame.data, frame.can_dlc);
-    return state.valid;
 }
 
 }  // namespace openarm::realtime

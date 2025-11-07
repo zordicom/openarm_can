@@ -122,9 +122,6 @@ private:
         frame.can_dlc = std::min(packet.data.size(), size_t(8));
         std::memcpy(frame.data, packet.data.data(), frame.can_dlc);
     };
-
-    bool decode_motor_state(const damiao_motor::Motor& motor, const can_frame& frame,
-                            damiao_motor::StateResult& state);
 };
 
 }  // namespace openarm::realtime

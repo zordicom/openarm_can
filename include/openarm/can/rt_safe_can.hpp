@@ -30,12 +30,7 @@
 
 namespace openarm::can {
 
-/**
- * @brief RT-safe CAN communication wrapper
- *
- * This class provides non-blocking CAN operations suitable for realtime contexts.
- * All operations are designed to be deterministic with no dynamic memory allocation.
- */
+// RT-safe CAN communication with non-blocking operations and no dynamic allocation.
 class RTSafeCANSocket {
 public:
     static constexpr size_t MAX_PENDING_FRAMES = 64;
@@ -43,68 +38,34 @@ public:
     RTSafeCANSocket() = default;
     ~RTSafeCANSocket();
 
-    /**
-     * @brief Initialize CAN socket (call from non-RT context)
-     */
+    // Initialize CAN socket (call from non-RT context).
     bool init(const std::string& interface);
 
-    /**
-     * @brief Close CAN socket
-     */
+    // Close CAN socket.
     void close();
 
-    /**
-     * @brief Non-blocking write with timeout
-     * @param frame CAN frame to send
-     * @param timeout_us Timeout in microseconds (0 = non-blocking)
-     * @return true if frame was sent, false on timeout or error
-     */
+    // Non-blocking write with timeout (0 = no wait). Returns true if sent.
     bool try_write(const can_frame& frame, int timeout_us = 0);
 
-    /**
-     * @brief Non-blocking read with timeout
-     * @param frame Buffer to receive frame
-     * @param timeout_us Timeout in microseconds (0 = non-blocking)
-     * @return true if frame was received, false on timeout or no data
-     */
+    // Non-blocking read with timeout (0 = no wait). Returns true if received.
     bool try_read(can_frame& frame, int timeout_us = 0);
 
-    /**
-     * @brief Batch write multiple frames (RT-safe)
-     * @param frames Array of frames to send
-     * @param count Number of frames to send
-     * @param timeout_us Total timeout for operation
-     * @return Number of frames successfully sent
-     */
+    // Batch write multiple frames. Returns number sent.
     size_t write_batch(const can_frame* frames, size_t count, int timeout_us = 0);
 
-    /**
-     * @brief Batch read multiple frames (RT-safe)
-     * @param frames Array to receive frames
-     * @param max_count Maximum frames to read
-     * @param timeout_us Total timeout for operation
-     * @return Number of frames successfully read
-     */
+    // Batch read multiple frames. Returns number received.
     size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0);
 
-    /**
-     * @brief Check if socket is initialized and ready
-     */
+    // Check if socket is initialized and ready.
     bool is_ready() const { return socket_fd_ >= 0; }
 
-    /**
-     * @brief Get socket file descriptor (for advanced usage)
-     */
+    // Get socket file descriptor for advanced usage.
     int get_fd() const { return socket_fd_; }
 
-    /**
-     * @brief Set socket to non-blocking mode
-     */
+    // Set socket to non-blocking mode.
     bool set_non_blocking(bool enable = true);
 
-    /**
-     * @brief Get error code from last operation
-     */
+    // Get error code from last operation.
     int get_last_error() const { return last_error_; }
 
 private:
@@ -114,29 +75,17 @@ private:
     // Pre-allocated pollfd for RT-safe polling
     struct pollfd poll_fd_;
 
-    /**
-     * @brief Wait for socket to be ready for I/O
-     * @param events POLLIN for read, POLLOUT for write
-     * @param timeout_us Timeout in microseconds
-     * @return true if ready, false on timeout
-     */
+    // Wait for socket to be ready for I/O (events: POLLIN for read, POLLOUT for write).
     bool wait_for_io(short events, int timeout_us);
 };
 
-/**
- * @brief RT-safe circular buffer for CAN frames
- *
- * Lock-free single-producer single-consumer ring buffer
- */
+// Lock-free single-producer single-consumer ring buffer for CAN frames.
 template<typename FrameType, size_t Size>
 class RTSafeCANBuffer {
 public:
     RTSafeCANBuffer() : head_(0), tail_(0) {}
 
-    /**
-     * @brief Try to push a frame (non-blocking)
-     * @return true if successful, false if buffer full
-     */
+    // Try to push a frame (non-blocking). Returns false if buffer full.
     bool try_push(const FrameType& frame) {
         size_t next_head = (head_ + 1) % Size;
         if (next_head == tail_.load(std::memory_order_acquire)) {
@@ -148,10 +97,7 @@ public:
         return true;
     }
 
-    /**
-     * @brief Try to pop a frame (non-blocking)
-     * @return true if successful, false if buffer empty
-     */
+    // Try to pop a frame (non-blocking). Returns false if buffer empty.
     bool try_pop(FrameType& frame) {
         size_t current_tail = tail_.load(std::memory_order_relaxed);
         if (current_tail == head_.load(std::memory_order_acquire)) {
@@ -163,25 +109,16 @@ public:
         return true;
     }
 
-    /**
-     * @brief Check if buffer is empty
-     */
     bool empty() const {
         return tail_.load(std::memory_order_acquire) ==
                head_.load(std::memory_order_acquire);
     }
 
-    /**
-     * @brief Check if buffer is full
-     */
     bool full() const {
         size_t next_head = (head_.load(std::memory_order_acquire) + 1) % Size;
         return next_head == tail_.load(std::memory_order_acquire);
     }
 
-    /**
-     * @brief Get number of items in buffer
-     */
     size_t size() const {
         size_t h = head_.load(std::memory_order_acquire);
         size_t t = tail_.load(std::memory_order_acquire);

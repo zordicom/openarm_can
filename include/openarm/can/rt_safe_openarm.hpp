@@ -28,13 +28,7 @@
 
 namespace openarm::can {
 
-/**
- * @brief RT-safe wrapper for OpenArm motor control
- *
- * This class provides deterministic, real-time safe operations for controlling
- * Damiao motors over CAN bus. All operations are non-blocking with pre-allocated
- * buffers to ensure RT safety.
- */
+// RT-safe wrapper for OpenArm motor control with non-blocking operations and pre-allocated buffers.
 class RTSafeOpenArm {
 public:
     static constexpr size_t MAX_MOTORS = 10;
@@ -43,130 +37,61 @@ public:
     RTSafeOpenArm() = default;
     ~RTSafeOpenArm() = default;
 
-    /**
-     * @brief Initialize the RT-safe OpenArm interface (call from non-RT context)
-     * @param can_interface CAN interface name (e.g., "can0")
-     * @return true if initialization successful
-     */
+    // Initialize the RT-safe OpenArm interface (call from non-RT context).
     bool init(const std::string& can_interface);
 
-    /**
-     * @brief Close the CAN interface
-     */
+    // Close the CAN interface.
     void close();
 
-    /**
-     * @brief Add a motor to the interface (call from non-RT context)
-     * @param motor_type Type of Damiao motor
-     * @param send_can_id CAN ID for sending commands
-     * @param recv_can_id CAN ID for receiving states
-     * @return Motor index (or -1 on failure)
-     */
+    // Add a motor to the interface (call from non-RT context). Returns motor index or -1 on failure.
     int add_motor(damiao_motor::MotorType motor_type,
                   uint32_t send_can_id,
                   uint32_t recv_can_id);
 
-    /**
-     * @brief Get number of configured motors
-     */
     size_t get_motor_count() const { return motor_count_; }
 
     // RT-safe command methods (non-blocking)
 
-    /**
-     * @brief Send enable command to all motors (RT-safe)
-     * @param timeout_us Timeout in microseconds
-     * @return Number of commands successfully sent
-     */
+    // Send enable command to all motors. Returns number sent.
     size_t enable_all_motors_rt(int timeout_us = 500);
 
-    /**
-     * @brief Send disable command to all motors (RT-safe)
-     * @param timeout_us Timeout in microseconds
-     * @return Number of commands successfully sent
-     */
+    // Send disable command to all motors. Returns number sent.
     size_t disable_all_motors_rt(int timeout_us = 500);
 
-    /**
-     * @brief Send set zero command to all motors (RT-safe)
-     * @param timeout_us Timeout in microseconds
-     * @return Number of commands successfully sent
-     */
+    // Send set zero command to all motors. Returns number sent.
     size_t set_zero_all_motors_rt(int timeout_us = 500);
 
-    /**
-     * @brief Send refresh/state request to all motors (RT-safe)
-     * @param timeout_us Timeout in microseconds
-     * @return Number of refresh commands successfully sent
-     */
+    // Send refresh/state request to all motors. Returns number sent.
     size_t refresh_all_motors_rt(int timeout_us = 500);
 
-    /**
-     * @brief Write parameter to all motors (RT-safe)
-     * @param rid Parameter ID from RID enum
-     * @param value Parameter value
-     * @param timeout_us Timeout in microseconds
-     * @return Number of parameter write commands successfully sent
-     */
+    // Write parameter to all motors. Returns number sent.
     size_t write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value, int timeout_us = 500);
 
-    /**
-     * @brief Send MIT control commands to all motors (RT-safe batch)
-     * @param params Array of MIT parameters for each motor
-     * @param count Number of motors to command
-     * @param timeout_us Timeout in microseconds
-     * @return Number of commands successfully sent
-     */
+    // Send MIT control commands batch. Returns number sent.
     size_t send_mit_batch_rt(const damiao_motor::MITParam* params,
                              size_t count,
                              int timeout_us = 500);
 
-    /**
-     * @brief Send position/velocity control commands to all motors (RT-safe batch)
-     * @param params Array of position/velocity parameters for each motor
-     * @param count Number of motors to command
-     * @param timeout_us Timeout in microseconds
-     * @return Number of commands successfully sent
-     */
+    // Send position/velocity control commands batch. Returns number sent.
     size_t send_posvel_batch_rt(const damiao_motor::PosVelParam* params,
                                 size_t count,
                                 int timeout_us = 500);
 
-    /**
-     * @brief Receive motor states (RT-safe batch)
-     * @param states Array to receive motor states
-     * @param max_count Maximum number of states to receive
-     * @param timeout_us Timeout in microseconds
-     * @return Number of states successfully received
-     */
+    // Receive motor states batch. Returns number received.
     size_t receive_states_batch_rt(damiao_motor::StateResult* states,
                                    size_t max_count,
                                    int timeout_us = 500);
 
-    /**
-     * @brief Control modes supported by the motors
-     */
     enum class ControlMode {
         MIT,                // MIT control mode
         POSITION_VELOCITY   // Position/Velocity control mode
     };
 
-    /**
-     * @brief Set control mode for all motors (RT-safe)
-     * @param mode Control mode (MIT or POSITION_VELOCITY)
-     * @param timeout_us Timeout in microseconds
-     * @return true if mode change successful for all motors
-     */
+    // Set control mode for all motors. Returns true if successful for all.
     bool set_mode_all_rt(ControlMode mode, int timeout_us = 500);
 
-    /**
-     * @brief Get last error code
-     */
     int get_last_error() const { return last_error_; }
 
-    /**
-     * @brief Check if interface is ready
-     */
     bool is_ready() const { return can_socket_ && can_socket_->is_ready(); }
 
 private:

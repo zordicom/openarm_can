@@ -146,6 +146,7 @@ NB_MODULE(openarm_can, m) {
         .def_rw("torque", &StateResult::torque)
         .def_rw("t_mos", &StateResult::t_mos)
         .def_rw("t_rotor", &StateResult::t_rotor)
+        .def_rw("error_code", &StateResult::error_code)
         .def_rw("valid", &StateResult::valid);
 
     // CANPacket struct
@@ -181,6 +182,8 @@ NB_MODULE(openarm_can, m) {
         .def("get_torque", &Motor::get_torque)
         .def("get_state_tmos", &Motor::get_state_tmos)
         .def("get_state_trotor", &Motor::get_state_trotor)
+        .def("get_state_error", &Motor::get_state_error)
+        .def("has_unrecoverable_error", &Motor::has_unrecoverable_error)
         .def("get_send_can_id", &Motor::get_send_can_id)
         .def("get_recv_can_id", &Motor::get_recv_can_id)
         .def("get_motor_type", &Motor::get_motor_type)

@@ -15,6 +15,9 @@
 #include <linux/can.h>
 #include <linux/can/raw.h>
 
+#include <cerrno>
+#include <chrono>
+#include <cstring>
 #include <iostream>
 #include <openarm/damiao_motor/dm_motor_device_collection.hpp>
 
@@ -89,14 +92,67 @@ void DMDeviceCollection::query_param_all(int RID) {
     }
 }
 
+void DMDeviceCollection::write_param_one(int i, int RID, uint32_t value) {
+    CANPacket param_write =
+        CanPacketEncoder::create_write_param_command(get_dm_devices()[i]->get_motor(), RID, value);
+    send_command_to_device(get_dm_devices()[i], param_write);
+}
+
+void DMDeviceCollection::write_param_all(int RID, uint32_t value) {
+    for (auto dm_device : get_dm_devices()) {
+        CANPacket param_write =
+            CanPacketEncoder::create_write_param_command(dm_device->get_motor(), RID, value);
+        send_command_to_device(dm_device, param_write);
+    }
+}
+
 void DMDeviceCollection::send_command_to_device(std::shared_ptr<DMCANDevice> dm_device,
                                                 const CANPacket& packet) {
+    bool write_success = false;
+    write_total_count_++;
+
     if (can_socket_.is_canfd_enabled()) {
         canfd_frame frame = dm_device->create_canfd_frame(packet.send_can_id, packet.data);
-        can_socket_.write_canfd_frame(frame);
+        write_success = can_socket_.write_canfd_frame(frame);
+        if (!write_success) {
+            write_failure_count_++;
+            // Throttle error logging to once per 5 seconds
+            static auto last_error_time = std::chrono::steady_clock::time_point::min();
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::seconds>(now - last_error_time).count() >= 5) {
+                std::cerr << "ERROR: Failed to write CANFD frame to CAN ID 0x"
+                          << std::hex << packet.send_can_id << std::dec
+                          << " (errno: " << errno << " - " << strerror(errno) << ")"
+                          << " [failures: " << write_failure_count_
+                          << "/" << write_total_count_ << "]" << std::endl;
+                last_error_time = now;
+            }
+        }
     } else {
         can_frame frame = dm_device->create_can_frame(packet.send_can_id, packet.data);
-        can_socket_.write_can_frame(frame);
+        write_success = can_socket_.write_can_frame(frame);
+        if (!write_success) {
+            write_failure_count_++;
+            // Throttle error logging to once per 5 seconds
+            static auto last_error_time = std::chrono::steady_clock::time_point::min();
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::seconds>(now - last_error_time).count() >= 5) {
+                std::cerr << "ERROR: Failed to write CAN frame to CAN ID 0x"
+                          << std::hex << packet.send_can_id << std::dec
+                          << " (errno: " << errno << " - " << strerror(errno) << ")"
+                          << " [failures: " << write_failure_count_
+                          << "/" << write_total_count_ << "]" << std::endl;
+                last_error_time = now;
+            }
+        }
+    }
+
+    // Warn if failure rate exceeds 10%
+    if (write_total_count_ % 100 == 0 && write_failure_count_ > write_total_count_ / 10) {
+        std::cerr << "WARNING: High CAN write failure rate detected: "
+                  << write_failure_count_ << "/" << write_total_count_
+                  << " (" << (100.0 * write_failure_count_ / write_total_count_) << "%)"
+                  << " - possible bus contention or interface issues" << std::endl;
     }
 }
 

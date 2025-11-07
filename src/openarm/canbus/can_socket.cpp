@@ -73,18 +73,13 @@ bool CANSocket::initialize_socket(const std::string& interface) {
 
     struct timeval timeout;
     timeout.tv_sec = 0;
-    timeout.tv_usec = 100;
+    timeout.tv_usec = 1000;
     if (setsockopt(socket_fd_, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
         cleanup();
         return false;
     }
 
-    // Set send timeout to prevent blocking forever on write operations
-    // This is critical for detecting interface issues and preventing hangs
-    struct timeval send_timeout;
-    send_timeout.tv_sec = 0;
-    send_timeout.tv_usec = 1000;  // 1ms send timeout
-    if (setsockopt(socket_fd_, SOL_SOCKET, SO_SNDTIMEO, &send_timeout, sizeof(send_timeout)) < 0) {
+    if (setsockopt(socket_fd_, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0) {
         cleanup();
         return false;
     }

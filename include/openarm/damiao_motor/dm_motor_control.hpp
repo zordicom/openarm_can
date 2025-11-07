@@ -91,6 +91,7 @@ private:
 class CanPacketDecoder {
 public:
     static StateResult parse_motor_state_data(const Motor& motor, const std::vector<uint8_t>& data);
+    static StateResult parse_motor_state_data(const Motor& motor, const uint8_t* data, size_t len);
     static ParamResult parse_motor_param_data(const std::vector<uint8_t>& data);
 
 private:

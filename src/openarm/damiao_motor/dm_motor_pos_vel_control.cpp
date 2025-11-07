@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "openarm/damiao_motor/dm_motor_control.hpp"
-#include "openarm/damiao_motor/dm_motor.hpp"
 #include <cstring>
+
+#include "openarm/damiao_motor/dm_motor.hpp"
+#include "openarm/damiao_motor/dm_motor_control.hpp"
 
 namespace openarm::damiao_motor {
 
@@ -32,14 +33,11 @@ std::vector<uint8_t> CanPacketEncoder::pack_pos_vel_control_data(const PosVelPar
     std::vector<uint8_t> data(8);
 
     // Convert to float for transmission (motor expects float, not double)
-    float p_des = static_cast<float>(pos_vel_param.position);
-    float v_des = static_cast<float>(pos_vel_param.velocity);
+    float p_des = static_cast<float>(pos_vel_param.q);
+    float v_des = static_cast<float>(pos_vel_param.dq);
 
     // Pack floats as bytes (IEEE 754 format, little-endian)
-    // This is identical to Python's struct.pack('f', value)
-    // Bytes 0-3: position
     memcpy(&data[0], &p_des, sizeof(float));
-    // Bytes 4-7: velocity
     memcpy(&data[4], &v_des, sizeof(float));
 
     return data;

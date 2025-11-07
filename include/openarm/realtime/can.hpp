@@ -43,11 +43,11 @@ public:
     // Close CAN socket.
     void close();
 
-    // Non-blocking write with timeout (0 = no wait). Returns true if sent.
-    bool try_write(const can_frame& frame, int timeout_us = 0);
+    // Non-blocking write (fail-fast). Returns true if sent.
+    bool try_write(const can_frame& frame);
 
-    // Non-blocking read with timeout (0 = no wait). Returns true if received.
-    bool try_read(can_frame& frame, int timeout_us = 0);
+    // Non-blocking read (fail-fast). Returns true if received.
+    bool try_read(can_frame& frame);
 
     // Batch write multiple frames. Returns number sent.
     size_t write_batch(const can_frame* frames, size_t count, int timeout_us = 0);

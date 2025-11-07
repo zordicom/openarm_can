@@ -89,68 +89,57 @@ void CANSocket::close() {
     }
 }
 
-bool CANSocket::try_write(const can_frame& frame, int timeout_us) {
+bool CANSocket::try_write(const can_frame& frame) {
     if (socket_fd_ < 0) {
         return false;
     }
 
-    auto start = steady_clock::now();
+    // Single write attempt - fail fast if TX buffer is full (RT-safe, no spinning)
+    ssize_t n = ::write(socket_fd_, &frame, sizeof(frame));
+    if (n == sizeof(frame)) {
+        return true;  // Success
+    }
 
-    while (true) {
-        ssize_t n = ::write(socket_fd_, &frame, sizeof(frame));
-        if (n == sizeof(frame)) {
-            return true;  // Success
-        }
-
-        if (n < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                auto elapsed = duration_cast<microseconds>(steady_clock::now() - start).count();
-
-                if (elapsed >= timeout_us) {
-                    return false;  // Timeout
-                }
-            } else {
-                last_errno_ = errno;
-                return false;
-            }
+    if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // TX buffer full - fail immediately instead of spinning
+            return false;
         } else {
-            // Partial write, shouldn't happen. Indicates error (see socketcan kernel documentation)
+            last_errno_ = errno;
             return false;
         }
+    } else {
+        // Partial write, shouldn't happen. Indicates error (see socketcan kernel documentation)
+        return false;
     }
 }
 
-bool CANSocket::try_read(can_frame& frame, int timeout_us) {
+bool CANSocket::try_read(can_frame& frame) {
     if (socket_fd_ < 0) {
         return false;
     }
 
-    auto start = steady_clock::now();
+    // Single read attempt - fail fast if no data available (RT-safe, no spinning)
+    ssize_t n = ::read(socket_fd_, &frame, sizeof(frame));
 
-    while (true) {
-        ssize_t n = ::read(socket_fd_, &frame, sizeof(frame));
+    if (n == sizeof(frame)) {
+        return true;
+    }
 
-        if (n == sizeof(frame)) {
-            return true;
-        }
-
-        if (n < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                auto now = steady_clock::now();
-                auto elapsed = duration_cast<microseconds>(now - start).count();
-
-                if (elapsed >= timeout_us) {
-                    return false;
-                }
-            } else {
-                last_errno_ = errno;
-                return false;
-            }
-        } else if (n < static_cast<ssize_t>(sizeof(frame))) {
-            // Partial read, shouldn't happen. Indicates error (see socketcan kernel documentation)
+    if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // No data available - fail immediately instead of spinning
+            return false;
+        } else {
+            last_errno_ = errno;
             return false;
         }
+    } else if (n < static_cast<ssize_t>(sizeof(frame))) {
+        // Partial read, shouldn't happen. Indicates error (see socketcan kernel documentation)
+        return false;
     }
+
+    return false;
 }
 
 size_t CANSocket::write_batch(const can_frame* frames, size_t count, int timeout_us) {
@@ -162,19 +151,18 @@ size_t CANSocket::write_batch(const can_frame* frames, size_t count, int timeout
     auto start_time = steady_clock::now();
 
     for (size_t i = 0; i < count; ++i) {
-        int remaining_timeout = 0;
+        // Check global timeout if specified
         if (timeout_us > 0) {
             auto elapsed = duration_cast<microseconds>(steady_clock::now() - start_time).count();
-            remaining_timeout = timeout_us - elapsed;
-            if (remaining_timeout <= 0) {
+            if (elapsed >= timeout_us) {
                 break;  // Timeout
             }
         }
 
-        if (try_write(frames[i], remaining_timeout)) {
+        if (try_write(frames[i])) {
             ++sent;
         } else {
-            break;  // Failed to send
+            break;  // Failed to send (TX buffer full)
         }
     }
 
@@ -190,19 +178,18 @@ size_t CANSocket::read_batch(can_frame* frames, size_t max_count, int timeout_us
     auto start_time = steady_clock::now();
 
     for (size_t i = 0; i < max_count; ++i) {
-        int remaining_timeout = 0;
+        // Check global timeout if specified
         if (timeout_us > 0) {
             auto elapsed = duration_cast<microseconds>(steady_clock::now() - start_time).count();
-            remaining_timeout = timeout_us - elapsed;
-            if (remaining_timeout <= 0) {
+            if (elapsed >= timeout_us) {
                 break;  // Timeout
             }
         }
 
-        if (try_read(frames[i], remaining_timeout)) {
+        if (try_read(frames[i])) {
             ++received;
         } else {
-            break;  // No more frames available
+            break;  // No more frames available (RX buffer empty)
         }
     }
 

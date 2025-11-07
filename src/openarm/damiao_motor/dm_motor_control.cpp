@@ -43,6 +43,10 @@ CANPacket CanPacketEncoder::create_query_param_command(const Motor& motor, int R
     return {0x7FF, pack_query_param_data(motor.get_send_can_id(), RID)};
 }
 
+CANPacket CanPacketEncoder::create_write_param_command(const Motor& motor, int RID, uint32_t value) {
+    return {0x7FF, pack_write_param_data(motor.get_send_can_id(), RID, value)};
+}
+
 CANPacket CanPacketEncoder::create_refresh_command(const Motor& motor) {
     uint8_t send_can_id = motor.get_send_can_id();
     std::vector<uint8_t> data = {static_cast<uint8_t>(send_can_id & 0xFF),
@@ -61,8 +65,11 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
                                                      const std::vector<uint8_t>& data) {
     if (data.size() < 8) {
         std::cerr << "Warning: Skipping motor state data less than 8 bytes" << std::endl;
-        return {0, 0, 0, 0, 0, false};
+        return {0, 0, 0, 0, 0, 0, false};
     }
+
+    // Parse error code from upper 4 bits of byte 0
+    uint8_t error_code = (data[0] >> 4) & 0x0F;
 
     // Parse state data
     uint16_t q_uint = (static_cast<uint16_t>(data[1]) << 8) | data[2];
@@ -78,7 +85,7 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
     double recv_dq = CanPacketDecoder::uint_to_double(dq_uint, -limits.vMax, limits.vMax, 12);
     double recv_tau = CanPacketDecoder::uint_to_double(tau_uint, -limits.tMax, limits.tMax, 12);
 
-    return {recv_q, recv_dq, recv_tau, t_mos, t_rotor, true};
+    return {recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, true};
 }
 
 ParamResult CanPacketDecoder::parse_motor_param_data(const std::vector<uint8_t>& data) {
@@ -132,6 +139,17 @@ std::vector<uint8_t> CanPacketEncoder::pack_query_param_data(uint32_t send_can_i
             0x00,
             0x00,
             0x00};
+}
+
+std::vector<uint8_t> CanPacketEncoder::pack_write_param_data(uint32_t send_can_id, int RID, uint32_t value) {
+    return {static_cast<uint8_t>(send_can_id & 0xFF),
+            static_cast<uint8_t>((send_can_id >> 8) & 0xFF),
+            0x55,
+            static_cast<uint8_t>(RID),
+            static_cast<uint8_t>(value & 0xFF),
+            static_cast<uint8_t>((value >> 8) & 0xFF),
+            static_cast<uint8_t>((value >> 16) & 0xFF),
+            static_cast<uint8_t>((value >> 24) & 0xFF)};
 }
 
 std::vector<uint8_t> CanPacketEncoder::pack_command_data(uint8_t cmd) {

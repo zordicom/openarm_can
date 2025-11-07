@@ -58,6 +58,7 @@ public:
     void recv_all(int timeout_us = 500);
     void set_callback_mode_all(damiao_motor::CallbackMode callback_mode);
     void query_param_all(int RID);
+    void write_param_all(int RID, uint32_t value);
 
 private:
     std::string can_interface_;

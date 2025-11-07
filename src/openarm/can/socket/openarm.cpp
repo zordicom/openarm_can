@@ -120,4 +120,10 @@ void OpenArm::set_callback_mode_all(damiao_motor::CallbackMode callback_mode) {
     }
 }
 
+void OpenArm::write_param_all(int RID, uint32_t value) {
+    for (damiao_motor::DMDeviceCollection* device_collection : sub_dm_device_collections_) {
+        device_collection->write_param_all(RID, value);
+    }
+}
+
 }  // namespace openarm::can::socket

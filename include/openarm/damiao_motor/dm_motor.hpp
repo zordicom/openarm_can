@@ -36,6 +36,13 @@ public:
     double get_torque() const { return state_tau_; }
     int get_state_tmos() const { return state_tmos_; }
     int get_state_trotor() const { return state_trotor_; }
+    uint8_t get_state_error() const { return state_error_; }
+
+    // Error checking
+    bool has_unrecoverable_error() const {
+        // Error codes: 0x1 = no error, 0x8-0xE = unrecoverable errors
+        return state_error_ != 0x1 && state_error_ >= 0x8 && state_error_ <= 0xE;
+    }
 
     // Motor property getters
     uint32_t get_send_can_id() const { return send_can_id_; }
@@ -53,7 +60,7 @@ public:
 
 protected:
     // State update methods
-    void update_state(double q, double dq, double tau, int tmos, int trotor);
+    void update_state(double q, double dq, double tau, int tmos, int trotor, uint8_t error_code);
     void set_state_tmos(int tmos);
     void set_state_trotor(int trotor);
     void set_enabled(bool enabled);
@@ -70,6 +77,7 @@ protected:
     // Current state
     double state_q_, state_dq_, state_tau_;
     int state_tmos_, state_trotor_;
+    uint8_t state_error_;  // Motor error code (0x1 = no error)
 
     // Parameter storage
     std::map<int, double> temp_param_dict_;

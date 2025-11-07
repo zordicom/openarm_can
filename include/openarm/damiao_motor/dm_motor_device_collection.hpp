@@ -46,6 +46,10 @@ public:
     void query_param_one(int i, int RID);
     void query_param_all(int RID);
 
+    // Write parameter operations
+    void write_param_one(int i, int RID, uint32_t value);
+    void write_param_all(int RID, uint32_t value);
+
     // MIT control operations
     void mit_control_one(int i, const MITParam& mit_param);
     void mit_control_all(const std::vector<MITParam>& mit_params);
@@ -60,6 +64,10 @@ protected:
     std::unique_ptr<CanPacketEncoder> can_packet_encoder_;
     std::unique_ptr<CanPacketDecoder> can_packet_decoder_;
     std::unique_ptr<canbus::CANDeviceCollection> device_collection_;
+
+    // Write failure tracking
+    size_t write_failure_count_ = 0;
+    size_t write_total_count_ = 0;
 
     // Helper methods for subclasses
     void send_command_to_device(std::shared_ptr<DMCANDevice> dm_device, const CANPacket& packet);

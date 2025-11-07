@@ -39,7 +39,8 @@ add_library(
   src/openarm/damiao_motor/dm_motor.cpp
   src/openarm/damiao_motor/dm_motor_control.cpp
   src/openarm/damiao_motor/dm_motor_device.cpp
-  src/openarm/damiao_motor/dm_motor_device_collection.cpp)
+  src/openarm/damiao_motor/dm_motor_device_collection.cpp
+  src/openarm/damiao_motor/dm_motor_pos_vel_control.cpp)
 set_target_properties(
   openarm_can
   PROPERTIES POSITION_INDEPENDENT_CODE ON

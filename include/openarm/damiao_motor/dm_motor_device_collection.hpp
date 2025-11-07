@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <chrono>
-#include <fstream>
 #include <memory>
 #include <vector>
 
@@ -78,10 +76,6 @@ protected:
     // Helper methods for subclasses
     void send_command_to_device(std::shared_ptr<DMCANDevice> dm_device, const CANPacket& packet);
     std::vector<std::shared_ptr<DMCANDevice>> get_dm_devices() const;
-
-    // CSV logging helpers
-    void log_command(int motor_index, const std::string& cmd_type,
-                     const MITParam* mit_param = nullptr,
-                     const PosVelParam* pos_vel_param = nullptr);
 };
+
 }  // namespace openarm::damiao_motor

@@ -106,130 +106,62 @@ void CANSocket::close() {
     }
 }
 
-bool CANSocket::try_write(const can_frame& frame, int timeout_us) {
-    if (socket_fd_ < 0) {
-        return false;
-    }
-
-    auto start = steady_clock::now();
-
-    while (true) {
-        // Try to write immediately
-        ssize_t n = ::write(socket_fd_, &frame, sizeof(frame));
-        if (n == sizeof(frame)) {
-            return true;  // Success
-        }
-
-        if (n < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // TX buffer full - wait for space with ppoll
-                auto elapsed = duration_cast<microseconds>(steady_clock::now() - start).count();
-                if (elapsed >= timeout_us) {
-                    return false;  // Timeout
-                }
-
-                // Wait for socket to be writable
-                struct pollfd pfd;
-                pfd.fd = socket_fd_;
-                pfd.events = POLLOUT;
-                pfd.revents = 0;
-
-                struct timespec timeout;
-                int64_t remaining_us = timeout_us - elapsed;
-                timeout.tv_sec = remaining_us / 1000000;
-                timeout.tv_nsec = (remaining_us % 1000000) * 1000;
-
-                int ret = ppoll(&pfd, 1, &timeout, nullptr);
-                if (ret <= 0) {
-                    // Timeout or error
-                    return false;
-                }
-                // Loop and try write again
-            } else {
-                last_errno_ = errno;
-                return false;
-            }
-        } else {
-            // Partial write, shouldn't happen. Indicates error (see socketcan kernel documentation)
-            return false;
-        }
-    }
-}
-
-bool CANSocket::try_read(can_frame& frame, int timeout_us) {
-    if (socket_fd_ < 0) {
-        return false;
-    }
-
-    auto start = steady_clock::now();
-
-    while (true) {
-        // Try to read immediately
-        ssize_t n = ::read(socket_fd_, &frame, sizeof(frame));
-
-        if (n == sizeof(frame)) {
-            return true;
-        }
-
-        if (n < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // No data available - wait for data with ppoll
-                auto elapsed = duration_cast<microseconds>(steady_clock::now() - start).count();
-                if (elapsed >= timeout_us) {
-                    return false;  // Timeout
-                }
-
-                // Wait for socket to be readable
-                struct pollfd pfd;
-                pfd.fd = socket_fd_;
-                pfd.events = POLLIN;
-                pfd.revents = 0;
-
-                struct timespec timeout;
-                int64_t remaining_us = timeout_us - elapsed;
-                timeout.tv_sec = remaining_us / 1000000;
-                timeout.tv_nsec = (remaining_us % 1000000) * 1000;
-
-                int ret = ppoll(&pfd, 1, &timeout, nullptr);
-                if (ret <= 0) {
-                    // Timeout or error
-                    return false;
-                }
-                // Loop and try read again
-            } else {
-                last_errno_ = errno;
-                return false;
-            }
-        } else if (n < static_cast<ssize_t>(sizeof(frame))) {
-            // Partial read, shouldn't happen. Indicates error (see socketcan kernel documentation)
-            return false;
-        }
-    }
-}
-
 size_t CANSocket::write_batch(const can_frame* frames, size_t count, int timeout_us) {
-    if (!frames || count == 0) {
+    if (!frames || count == 0 || socket_fd_ < 0) {
         return 0;
     }
 
-    size_t sent = 0;
+    // Cap to our pre-allocated buffer size
+    count = std::min(count, MAX_PENDING_FRAMES);
+
     auto start_time = steady_clock::now();
 
+    // Setup mmsghdr structures using pre-allocated buffers
     for (size_t i = 0; i < count; ++i) {
-        // Calculate remaining timeout for this frame
-        int remaining_timeout = 0;
-        if (timeout_us > 0) {
-            auto elapsed = duration_cast<microseconds>(steady_clock::now() - start_time).count();
-            remaining_timeout = timeout_us - elapsed;
-            if (remaining_timeout <= 0) {
-                break;  // Global timeout exceeded
-            }
-        }
+        send_iovecs_[i].iov_base = const_cast<can_frame*>(&frames[i]);
+        send_iovecs_[i].iov_len = sizeof(can_frame);
 
-        if (try_write(frames[i], remaining_timeout)) {
-            ++sent;
+        memset(&send_msgs_[i], 0, sizeof(struct mmsghdr));
+        send_msgs_[i].msg_hdr.msg_iov = &send_iovecs_[i];
+        send_msgs_[i].msg_hdr.msg_iovlen = 1;
+    }
+
+    size_t sent = 0;
+
+    while (sent < count) {
+        // Try to send remaining frames
+        int ret = sendmmsg(socket_fd_, &send_msgs_[sent], count - sent, MSG_DONTWAIT);
+
+        if (ret > 0) {
+            sent += ret;
+        } else if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            // TX buffer full - wait for space with ppoll if timeout allows
+            auto elapsed = duration_cast<microseconds>(steady_clock::now() - start_time).count();
+            if (elapsed >= timeout_us) {
+                return sent;  // Timeout - return partial results
+            }
+
+            // Wait for socket to be writable
+            struct pollfd pfd;
+            pfd.fd = socket_fd_;
+            pfd.events = POLLOUT;
+            pfd.revents = 0;
+
+            struct timespec timeout;
+            int64_t remaining_us = timeout_us - elapsed;
+            timeout.tv_sec = remaining_us / 1000000;
+            timeout.tv_nsec = (remaining_us % 1000000) * 1000;
+
+            if (ppoll(&pfd, 1, &timeout, nullptr) <= 0) {
+                return sent;  // Timeout or error
+            }
+            // Loop and try sendmmsg again
         } else {
-            break;  // Failed to send within timeout
+            // Error (other than EAGAIN) - return what we've sent so far
+            if (ret < 0) {
+                last_errno_ = errno;
+            }
+            return sent;
         }
     }
 
@@ -237,32 +169,66 @@ size_t CANSocket::write_batch(const can_frame* frames, size_t count, int timeout
 }
 
 size_t CANSocket::read_batch(can_frame* frames, size_t max_count, int timeout_us) {
-    if (!frames || max_count == 0) {
+    if (!frames || max_count == 0 || socket_fd_ < 0) {
         return 0;
     }
 
-    size_t received = 0;
+    // Cap to our pre-allocated buffer size
+    max_count = std::min(max_count, MAX_PENDING_FRAMES);
+
     auto start_time = steady_clock::now();
 
+    // Setup mmsghdr structures using pre-allocated buffers
     for (size_t i = 0; i < max_count; ++i) {
-        // Calculate remaining timeout for this frame
-        int remaining_timeout = 0;
-        if (timeout_us > 0) {
-            auto elapsed = duration_cast<microseconds>(steady_clock::now() - start_time).count();
-            remaining_timeout = timeout_us - elapsed;
-            if (remaining_timeout <= 0) {
-                break;  // Global timeout exceeded
-            }
+        recv_iovecs_[i].iov_base = &frames[i];
+        recv_iovecs_[i].iov_len = sizeof(can_frame);
+
+        memset(&recv_msgs_[i], 0, sizeof(struct mmsghdr));
+        recv_msgs_[i].msg_hdr.msg_iov = &recv_iovecs_[i];
+        recv_msgs_[i].msg_hdr.msg_iovlen = 1;
+    }
+
+    // Try to receive all available frames (non-blocking)
+    int ret = recvmmsg(socket_fd_, recv_msgs_.data(), max_count, MSG_DONTWAIT, nullptr);
+
+    if (ret > 0) {
+        return ret;  // Got frames immediately
+    }
+
+    if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        // No data available - wait if timeout allows
+        auto elapsed = duration_cast<microseconds>(steady_clock::now() - start_time).count();
+        if (elapsed >= timeout_us) {
+            return 0;  // Timeout
         }
 
-        if (try_read(frames[i], remaining_timeout)) {
-            ++received;
-        } else {
-            break;  // No more frames available within timeout
+        // Wait for socket to be readable
+        struct pollfd pfd;
+        pfd.fd = socket_fd_;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+
+        struct timespec timeout;
+        int64_t remaining_us = timeout_us - elapsed;
+        timeout.tv_sec = remaining_us / 1000000;
+        timeout.tv_nsec = (remaining_us % 1000000) * 1000;
+
+        if (ppoll(&pfd, 1, &timeout, nullptr) <= 0) {
+            return 0;  // Timeout or error
+        }
+
+        // Try again after poll
+        ret = recvmmsg(socket_fd_, recv_msgs_.data(), max_count, MSG_DONTWAIT, nullptr);
+        if (ret > 0) {
+            return ret;
         }
     }
 
-    return received;
+    // Error or no data
+    if (ret < 0) {
+        last_errno_ = errno;
+    }
+    return 0;
 }
 
 }  // namespace openarm::realtime::can

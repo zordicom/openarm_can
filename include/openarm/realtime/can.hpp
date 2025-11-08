@@ -43,16 +43,10 @@ public:
     // Close CAN socket.
     void close();
 
-    // Write with timeout. Returns true if sent within timeout_us.
-    bool try_write(const can_frame& frame, int timeout_us = 0);
-
-    // Read with timeout. Returns true if received within timeout_us.
-    bool try_read(can_frame& frame, int timeout_us = 0);
-
-    // Batch write multiple frames. Returns number sent.
+    // Write frames. Returns number sent (pass count=1 for single frame).
     size_t write_batch(const can_frame* frames, size_t count, int timeout_us = 0);
 
-    // Batch read multiple frames. Returns number received.
+    // Read frames. Returns number received (pass max_count=1 for single frame).
     size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0);
 
     // Check if socket is initialized and ready.
@@ -64,6 +58,12 @@ public:
 private:
     int socket_fd_ = -1;
     int last_errno_ = 0;
+
+    // Pre-allocated buffers for batch operations (avoid allocation in RT path)
+    std::array<struct mmsghdr, MAX_PENDING_FRAMES> send_msgs_;
+    std::array<struct iovec, MAX_PENDING_FRAMES> send_iovecs_;
+    std::array<struct mmsghdr, MAX_PENDING_FRAMES> recv_msgs_;
+    std::array<struct iovec, MAX_PENDING_FRAMES> recv_iovecs_;
 };
 
 // Lock-free single-producer single-consumer ring buffer for CAN frames.

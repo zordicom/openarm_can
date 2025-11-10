@@ -65,7 +65,7 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
                                                      const std::vector<uint8_t>& data) {
     if (data.size() < 8) {
         std::cerr << "Warning: Skipping motor state data less than 8 bytes" << std::endl;
-        return {0, 0, 0, 0, 0, 0, false};
+        return {static_cast<uint16_t>(motor.get_recv_can_id()), 0.0, 0.0, 0.0, 0, 0, 0, false};
     }
 
     // Parse error code from upper 4 bits of byte 0
@@ -85,7 +85,7 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
     double recv_dq = CanPacketDecoder::uint_to_double(dq_uint, -limits.vMax, limits.vMax, 12);
     double recv_tau = CanPacketDecoder::uint_to_double(tau_uint, -limits.tMax, limits.tMax, 12);
 
-    return {recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, true};
+    return {static_cast<uint16_t>(motor.get_recv_can_id()), recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, true};
 }
 
 StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
@@ -93,7 +93,7 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
                                                      size_t len) {
     if (len < 8) {
         std::cerr << "Warning: Skipping motor state data less than 8 bytes" << std::endl;
-        return {0, 0, 0, 0, 0, 0, false};
+        return {static_cast<uint16_t>(motor.get_recv_can_id()), 0.0, 0.0, 0.0, 0, 0, 0, false};
     }
 
     // Parse error code from upper 4 bits of byte 0
@@ -113,7 +113,7 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
     double recv_dq = CanPacketDecoder::uint_to_double(dq_uint, -limits.vMax, limits.vMax, 12);
     double recv_tau = CanPacketDecoder::uint_to_double(tau_uint, -limits.tMax, limits.tMax, 12);
 
-    return {recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, true};
+    return {static_cast<uint16_t>(motor.get_recv_can_id()), recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, true};
 }
 
 ParamResult CanPacketDecoder::parse_motor_param_data(const std::vector<uint8_t>& data) {

@@ -36,6 +36,7 @@ struct ParamResult {
 };
 
 struct StateResult {
+    uint16_t motor_id;
     double position;
     double velocity;
     double torque;

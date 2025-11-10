@@ -132,31 +132,45 @@ public:
             return 0;
         }
 
-        // Convert can_frame to canfd_frame for transmission
-        auto start_time = std::chrono::steady_clock::now();
-        size_t sent = 0;
+        // Cap to our pre-allocated buffer size
+        count = std::min(count, MAX_PENDING_FRAMES);
 
+        auto start_time = std::chrono::steady_clock::now();
+
+        // Convert can_frame to canfd_frame and setup mmsghdr structures
         for (size_t i = 0; i < count; ++i) {
             // Convert standard CAN frame to CAN-FD frame
-            struct canfd_frame fd_frame;
-            memset(&fd_frame, 0, sizeof(fd_frame));
-            fd_frame.can_id = frames[i].can_id;
-            // Use 'len' (modern field) instead of deprecated 'can_dlc'
-            fd_frame.len = frames[i].len;
-            memcpy(fd_frame.data, frames[i].data, frames[i].len);
-            // Don't set CANFD_BRS or CANFD_ESI for compatibility
+            memset(&send_canfd_frames_[i], 0, sizeof(struct canfd_frame));
+            send_canfd_frames_[i].can_id = frames[i].can_id;
+            send_canfd_frames_[i].len = frames[i].len;
+            memcpy(send_canfd_frames_[i].data, frames[i].data, frames[i].len);
+            // Don't set CANFD_BRS or CANFD_ESI for compatibility with standard CAN
 
-            ssize_t ret = ::write(socket_fd_, &fd_frame, sizeof(fd_frame));
+            // Setup iovec to point to the CAN-FD frame
+            send_iovecs_[i].iov_base = &send_canfd_frames_[i];
+            send_iovecs_[i].iov_len = sizeof(struct canfd_frame);
 
-            if (ret == sizeof(fd_frame)) {
-                sent++;
+            // Setup mmsghdr
+            memset(&send_msgs_[i], 0, sizeof(struct mmsghdr));
+            send_msgs_[i].msg_hdr.msg_iov = &send_iovecs_[i];
+            send_msgs_[i].msg_hdr.msg_iovlen = 1;
+        }
+
+        size_t sent = 0;
+
+        while (sent < count) {
+            // Try to send remaining frames using sendmmsg (batch syscall)
+            int ret = sendmmsg(socket_fd_, &send_msgs_[sent], count - sent, MSG_DONTWAIT);
+
+            if (ret > 0) {
+                sent += ret;
             } else if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                // TX buffer full - check timeout
+                // TX buffer full - wait for space with ppoll if timeout allows
                 auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
                                    std::chrono::steady_clock::now() - start_time)
                                    .count();
                 if (elapsed >= timeout_us) {
-                    return sent;  // Timeout
+                    return sent;  // Timeout - return partial results
                 }
 
                 // Wait for socket to be writable
@@ -165,20 +179,17 @@ public:
                 pfd.events = POLLOUT;
                 pfd.revents = 0;
 
-                int remaining_us = timeout_us - elapsed;
+                int64_t remaining_us = timeout_us - elapsed;
                 struct timespec timeout;
                 timeout.tv_sec = remaining_us / 1000000;
                 timeout.tv_nsec = (remaining_us % 1000000) * 1000;
 
-                int poll_ret = ppoll(&pfd, 1, &timeout, nullptr);
-                if (poll_ret <= 0) {
+                if (ppoll(&pfd, 1, &timeout, nullptr) <= 0) {
                     return sent;  // Timeout or error
                 }
-
-                // Retry this frame
-                i--;
+                // Loop and try sendmmsg again
             } else {
-                // Other error
+                // Error (other than EAGAIN) - return what we've sent so far
                 return sent;
             }
         }
@@ -191,55 +202,77 @@ public:
             return 0;
         }
 
+        // Cap to our pre-allocated buffer size
+        max_count = std::min(max_count, MAX_PENDING_FRAMES);
+
         auto start_time = std::chrono::steady_clock::now();
-        size_t received = 0;
 
-        while (received < max_count) {
-            struct canfd_frame fd_frame;
-            ssize_t ret = ::read(socket_fd_, &fd_frame, sizeof(fd_frame));
+        // Setup mmsghdr structures using pre-allocated buffers
+        for (size_t i = 0; i < max_count; ++i) {
+            recv_iovecs_[i].iov_base = &recv_canfd_frames_[i];
+            recv_iovecs_[i].iov_len = sizeof(struct canfd_frame);
 
-            if (ret == CANFD_MTU) {
-                // CAN-FD frame received - convert to standard can_frame
-                frames[received].can_id = fd_frame.can_id;
-                frames[received].len = std::min(fd_frame.len, static_cast<__u8>(8));
-                memcpy(frames[received].data, fd_frame.data, frames[received].len);
-                received++;
-            } else if (ret == CAN_MTU) {
-                // Standard CAN frame received (backward compatible)
-                struct can_frame* std_frame = (struct can_frame*)&fd_frame;
-                frames[received] = *std_frame;
-                received++;
-            } else if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                // No data available
-                auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-                                   std::chrono::steady_clock::now() - start_time)
-                                   .count();
-                if (elapsed >= timeout_us) {
-                    return received;  // Timeout
+            memset(&recv_msgs_[i], 0, sizeof(struct mmsghdr));
+            recv_msgs_[i].msg_hdr.msg_iov = &recv_iovecs_[i];
+            recv_msgs_[i].msg_hdr.msg_iovlen = 1;
+        }
+
+        // Try to receive all available frames (non-blocking)
+        int ret = recvmmsg(socket_fd_, recv_msgs_.data(), max_count, MSG_DONTWAIT, nullptr);
+
+        if (ret > 0) {
+            // Convert received CAN-FD frames to can_frame
+            for (int i = 0; i < ret; ++i) {
+                // Check if we received CANFD_MTU or CAN_MTU
+                if (recv_msgs_[i].msg_len == CANFD_MTU || recv_msgs_[i].msg_len == CAN_MTU) {
+                    frames[i].can_id = recv_canfd_frames_[i].can_id;
+                    frames[i].len = std::min(recv_canfd_frames_[i].len, static_cast<__u8>(8));
+                    memcpy(frames[i].data, recv_canfd_frames_[i].data, frames[i].len);
                 }
+            }
+            return ret;
+        }
 
-                // Wait for data with ppoll
-                struct pollfd pfd;
-                pfd.fd = socket_fd_;
-                pfd.events = POLLIN;
-                pfd.revents = 0;
+        if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            // No data available - wait if timeout allows
+            auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                               std::chrono::steady_clock::now() - start_time)
+                               .count();
+            if (elapsed >= timeout_us) {
+                return 0;  // Timeout
+            }
 
-                int remaining_us = timeout_us - elapsed;
-                struct timespec timeout;
-                timeout.tv_sec = remaining_us / 1000000;
-                timeout.tv_nsec = (remaining_us % 1000000) * 1000;
+            // Wait for socket to be readable
+            struct pollfd pfd;
+            pfd.fd = socket_fd_;
+            pfd.events = POLLIN;
+            pfd.revents = 0;
 
-                int poll_ret = ppoll(&pfd, 1, &timeout, nullptr);
-                if (poll_ret <= 0) {
-                    return received;  // Timeout or error
+            int64_t remaining_us = timeout_us - elapsed;
+            struct timespec timeout;
+            timeout.tv_sec = remaining_us / 1000000;
+            timeout.tv_nsec = (remaining_us % 1000000) * 1000;
+
+            if (ppoll(&pfd, 1, &timeout, nullptr) <= 0) {
+                return 0;  // Timeout or error
+            }
+
+            // Try again after poll
+            ret = recvmmsg(socket_fd_, recv_msgs_.data(), max_count, MSG_DONTWAIT, nullptr);
+            if (ret > 0) {
+                for (int i = 0; i < ret; ++i) {
+                    if (recv_msgs_[i].msg_len == CANFD_MTU || recv_msgs_[i].msg_len == CAN_MTU) {
+                        frames[i].can_id = recv_canfd_frames_[i].can_id;
+                        frames[i].len = std::min(recv_canfd_frames_[i].len, static_cast<__u8>(8));
+                        memcpy(frames[i].data, recv_canfd_frames_[i].data, frames[i].len);
+                    }
                 }
-            } else {
-                // Error or unexpected size
-                return received;
+                return ret;
             }
         }
 
-        return received;
+        // Error or no data
+        return 0;
     }
 
     bool is_ready() const override { return socket_fd_ >= 0; }
@@ -250,6 +283,14 @@ public:
 
 private:
     int socket_fd_ = -1;
+
+    // Pre-allocated buffers for batch operations (avoid allocation in RT path)
+    std::array<struct canfd_frame, MAX_PENDING_FRAMES> send_canfd_frames_;
+    std::array<struct canfd_frame, MAX_PENDING_FRAMES> recv_canfd_frames_;
+    std::array<struct mmsghdr, MAX_PENDING_FRAMES> send_msgs_;
+    std::array<struct iovec, MAX_PENDING_FRAMES> send_iovecs_;
+    std::array<struct mmsghdr, MAX_PENDING_FRAMES> recv_msgs_;
+    std::array<struct iovec, MAX_PENDING_FRAMES> recv_iovecs_;
 };
 
 }  // namespace openarm::realtime

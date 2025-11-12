@@ -258,10 +258,6 @@ size_t CANFDSocket::read_batch(can_frame* frames, size_t max_count, int timeout_
     return -1;
 }
 
-bool CANFDSocket::is_ready() const {
-    return socket_fd_ >= 0;
-}
-
 size_t CANFDSocket::get_max_payload_size() const {
     return 64;  // CAN-FD supports up to 64 bytes
 }

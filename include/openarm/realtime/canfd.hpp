@@ -53,7 +53,6 @@ public:
     // Read frames. Returns number received, -1 if error (check errno)
     size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0) override;
 
-    bool is_ready() const override;
     size_t get_max_payload_size() const override;
 
 private:

@@ -51,9 +51,6 @@ public:
     // Read frames. Returns number received, -1 if error (check errno)
     size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0) override;
 
-    // Check if socket is initialized and ready.
-    bool is_ready() const override { return socket_fd_ >= 0; }
-
     // Get max payload size for classical CAN
     size_t get_max_payload_size() const override { return 8; }
 

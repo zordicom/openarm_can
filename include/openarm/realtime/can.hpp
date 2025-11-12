@@ -30,18 +30,19 @@
 namespace openarm::realtime::can {
 
 // RT-safe CAN communication with non-blocking operations and no dynamic allocation.
+// RAII: Constructor opens CAN socket, destructor closes it.
 class CANSocket {
 public:
     static constexpr size_t MAX_PENDING_FRAMES = 64;
 
-    CANSocket() = default;
+    explicit CANSocket(const std::string& interface);
     ~CANSocket();
 
-    // Initialize CAN socket (call from non-RT context).
-    bool init(const std::string& interface);
-
-    // Close CAN socket.
-    void close();
+    // Delete copy/move to prevent socket confusion
+    CANSocket(const CANSocket&) = delete;
+    CANSocket& operator=(const CANSocket&) = delete;
+    CANSocket(CANSocket&&) = delete;
+    CANSocket& operator=(CANSocket&&) = delete;
 
     // Write frames. Returns number sent (pass count=1 for single frame).
     size_t write_batch(const can_frame* frames, size_t count, int timeout_us = 0);
@@ -52,12 +53,8 @@ public:
     // Check if socket is initialized and ready.
     bool is_ready() const { return socket_fd_ >= 0; }
 
-    // Get errno from last failed operation (only set during init).
-    int get_last_errno() const { return last_errno_; }
-
 private:
     int socket_fd_ = -1;
-    int last_errno_ = 0;
 
     // Pre-allocated buffers for batch operations (avoid allocation in RT path)
     std::array<struct mmsghdr, MAX_PENDING_FRAMES> send_msgs_;

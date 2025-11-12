@@ -15,7 +15,6 @@
 #ifndef OPENARM_REALTIME_CAN_TRANSPORT_HPP_
 #define OPENARM_REALTIME_CAN_TRANSPORT_HPP_
 
-#include <memory>
 #include "openarm/realtime/can.hpp"
 #include "openarm/realtime/transport.hpp"
 
@@ -31,20 +30,10 @@ namespace openarm::realtime {
  */
 class CANTransport : public IOpenArmTransport {
 public:
-    explicit CANTransport(const std::string& interface) {
-        socket_ = std::make_unique<can::CANSocket>();
-        if (!socket_->init(interface)) {
-            int err = socket_->get_last_errno();
-            throw std::runtime_error("Failed to initialize CAN transport on " + interface +
-                                     " (errno: " + std::to_string(err) + ")");
-        }
-    }
+    explicit CANTransport(const std::string& interface)
+        : socket_(interface) {}
 
-    ~CANTransport() override {
-        if (socket_) {
-            socket_->close();
-        }
-    }
+    ~CANTransport() override = default;
 
     // Delete copy/move to prevent socket confusion
     CANTransport(const CANTransport&) = delete;
@@ -53,15 +42,15 @@ public:
     CANTransport& operator=(CANTransport&&) = delete;
 
     size_t write_batch(const can_frame* frames, size_t count, int timeout_us = 0) override {
-        return socket_->write_batch(frames, count, timeout_us);
+        return socket_.write_batch(frames, count, timeout_us);
     }
 
     size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0) override {
-        return socket_->read_batch(frames, max_count, timeout_us);
+        return socket_.read_batch(frames, max_count, timeout_us);
     }
 
     bool is_ready() const override {
-        return socket_->is_ready();
+        return socket_.is_ready();
     }
 
     size_t get_max_payload_size() const override {
@@ -69,7 +58,7 @@ public:
     }
 
 private:
-    std::unique_ptr<can::CANSocket> socket_;
+    can::CANSocket socket_;
 };
 
 }  // namespace openarm::realtime

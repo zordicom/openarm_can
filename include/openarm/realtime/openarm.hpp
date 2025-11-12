@@ -24,7 +24,7 @@
 #include "openarm/damiao_motor/dm_motor.hpp"
 #include "openarm/damiao_motor/dm_motor_constants.hpp"
 #include "openarm/damiao_motor/dm_motor_control.hpp"
-#include "openarm/realtime/can.hpp"
+#include "openarm/realtime/transport.hpp"
 
 namespace openarm::realtime {
 
@@ -41,13 +41,8 @@ public:
     static constexpr size_t MAX_MOTOR_CAN_ID = 256;
 
     OpenArm() = default;
+    explicit OpenArm(std::unique_ptr<IOpenArmTransport> transport);
     ~OpenArm() = default;
-
-    // Initialize the RT-safe OpenArm interface (call from non-RT context).
-    bool init(const std::string& can_interface);
-
-    // Close the CAN interface.
-    void close();
 
     // Add a motor to the interface (call from non-RT context). Returns motor index or -1 on
     // failure.
@@ -88,7 +83,7 @@ public:
 
     int get_last_errno() const { return last_errno_; }
 
-    bool is_ready() const { return can_socket_ && can_socket_->is_ready(); }
+    bool is_ready() const { return transport_ && transport_->is_ready(); }
 
 private:
     // Pre-allocated motor storage (using pointers since Motor has no default constructor)
@@ -104,8 +99,8 @@ private:
     std::array<can_frame, MAX_MOTORS> tx_disable_;
     std::array<can_frame, MAX_MOTORS> tx_zero_;
 
-    // CAN socket
-    std::unique_ptr<can::CANSocket> can_socket_;
+    // Transport layer (CAN or CAN-FD)
+    std::unique_ptr<IOpenArmTransport> transport_;
 
     // Error tracking
     std::atomic<int> last_errno_{0};
@@ -119,8 +114,8 @@ private:
     // Convert CAN packet to frame (inline for performance in RT loop)
     inline static void packet_to_frame(const damiao_motor::CANPacket& packet, can_frame& frame) {
         frame.can_id = packet.send_can_id;  // Standard frame (11-bit ID)
-        frame.can_dlc = std::min(packet.data.size(), size_t(8));
-        std::memcpy(frame.data, packet.data.data(), frame.can_dlc);
+        frame.len = std::min(packet.data.size(), size_t(8));
+        std::memcpy(frame.data, packet.data.data(), frame.len);
     };
 };
 

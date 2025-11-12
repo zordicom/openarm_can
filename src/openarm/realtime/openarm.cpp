@@ -33,7 +33,7 @@ OpenArm::OpenArm(std::unique_ptr<IOpenArmTransport> transport)
 int OpenArm::add_motor(damiao_motor::MotorType motor_type, uint32_t send_can_id,
                        uint32_t recv_can_id) {
     if (motor_count_ >= MAX_MOTORS) {
-        last_errno_ = -1;  // Too many motors
+        errno = EINVAL;  // Too many motors
         return -1;
     }
 
@@ -41,7 +41,7 @@ int OpenArm::add_motor(damiao_motor::MotorType motor_type, uint32_t send_can_id,
     // Create motor object
 
     if (recv_can_id >= recv_id_to_motor_index_.size()) {
-        last_errno_ = -1;  // recv_can_id too large.
+        errno = EINVAL;  // recv_can_id too large
         return -1;
     }
 
@@ -67,6 +67,7 @@ int OpenArm::add_motor(damiao_motor::MotorType motor_type, uint32_t send_can_id,
 
 size_t OpenArm::enable_all_motors_rt(int timeout_us) {
     if (!transport_) {
+        errno = EINVAL;
         return 0;
     }
 
@@ -75,6 +76,7 @@ size_t OpenArm::enable_all_motors_rt(int timeout_us) {
 
 size_t OpenArm::disable_all_motors_rt(int timeout_us) {
     if (!transport_) {
+        errno = EINVAL;
         return 0;
     }
 
@@ -83,6 +85,7 @@ size_t OpenArm::disable_all_motors_rt(int timeout_us) {
 
 size_t OpenArm::set_zero_all_motors_rt(int timeout_us) {
     if (!transport_) {
+        errno = EINVAL;
         return 0;
     }
 
@@ -91,6 +94,7 @@ size_t OpenArm::set_zero_all_motors_rt(int timeout_us) {
 
 size_t OpenArm::refresh_all_motors_rt(int timeout_us) {
     if (!transport_) {
+        errno = EINVAL;
         return 0;
     }
 
@@ -100,6 +104,7 @@ size_t OpenArm::refresh_all_motors_rt(int timeout_us) {
 
 size_t OpenArm::write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value, int timeout_us) {
     if (!transport_) {
+        errno = EINVAL;
         return 0;
     }
 
@@ -128,6 +133,7 @@ size_t OpenArm::write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t valu
 size_t OpenArm::send_mit_batch_rt(const damiao_motor::MITParam* params, size_t count,
                                   int timeout_us) {
     if (!transport_ || !params) {
+        errno = EINVAL;
         return 0;
     }
 
@@ -146,6 +152,7 @@ size_t OpenArm::send_mit_batch_rt(const damiao_motor::MITParam* params, size_t c
 size_t OpenArm::send_posvel_batch_rt(const damiao_motor::PosVelParam* params, size_t count,
                                      int timeout_us) {
     if (!transport_ || !params) {
+        errno = EINVAL;
         return 0;
     }
 
@@ -164,6 +171,7 @@ size_t OpenArm::send_posvel_batch_rt(const damiao_motor::PosVelParam* params, si
 size_t OpenArm::receive_states_batch_rt(damiao_motor::StateResult* states, size_t max_count,
                                         int timeout_us) {
     if (!transport_ || !states) {
+        errno = EINVAL;
         return 0;
     }
 

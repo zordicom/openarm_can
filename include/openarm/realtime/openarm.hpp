@@ -81,10 +81,6 @@ public:
     // Set control mode for all motors. Returns true if successful for all.
     bool set_mode_all_rt(ControlMode mode, int timeout_us = 500);
 
-    int get_last_errno() const { return last_errno_; }
-
-    bool is_ready() const { return transport_ && transport_->is_ready(); }
-
 private:
     // Pre-allocated motor storage (using pointers since Motor has no default constructor)
     std::array<std::unique_ptr<damiao_motor::Motor>, MAX_MOTORS> motors_;
@@ -101,9 +97,6 @@ private:
 
     // Transport layer (CAN or CAN-FD)
     std::unique_ptr<IOpenArmTransport> transport_;
-
-    // Error tracking
-    std::atomic<int> last_errno_{0};
 
     // Motor CAN ID to motor index. Assumes CAN IDs don't exceed MAX_MOTOR_CAN_ID.
     std::array<int, MAX_MOTOR_CAN_ID> recv_id_to_motor_index_;

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef OPENARM_REALTIME_CANFD_TRANSPORT_HPP_
-#define OPENARM_REALTIME_CANFD_TRANSPORT_HPP_
+#ifndef OPENARM_REALTIME_CANFD_HPP_
+#define OPENARM_REALTIME_CANFD_HPP_
 
 #include <linux/can.h>
 #include <sys/socket.h>
@@ -24,31 +24,35 @@
 
 #include "openarm/realtime/transport.hpp"
 
-namespace openarm::realtime {
+namespace openarm::realtime::can {
 
 /**
- * @brief CAN-FD transport implementation
+ * @brief CAN-FD socket implementation
  *
  * Provides CAN-FD support with up to 64 bytes of data per frame.
- * Uses the same batch I/O patterns as regular CAN but with canfd_frame.
+ * Implements IOpenArmTransport interface for CAN-FD.
  *
  * RAII: Constructor opens CAN-FD socket, destructor closes it.
  */
-class CANFDTransport : public IOpenArmTransport {
+class CANFDSocket : public IOpenArmTransport {
 public:
-    static constexpr size_t MAX_PENDING_FRAMES = 64;
+    static constexpr size_t MAX_FRAMES = 64;
 
-    explicit CANFDTransport(const std::string& interface);
-    ~CANFDTransport() override;
+    explicit CANFDSocket(const std::string& interface);
+    ~CANFDSocket() override;
 
     // Delete copy/move to prevent socket confusion
-    CANFDTransport(const CANFDTransport&) = delete;
-    CANFDTransport& operator=(const CANFDTransport&) = delete;
-    CANFDTransport(CANFDTransport&&) = delete;
-    CANFDTransport& operator=(CANFDTransport&&) = delete;
+    CANFDSocket(const CANFDSocket&) = delete;
+    CANFDSocket& operator=(const CANFDSocket&) = delete;
+    CANFDSocket(CANFDSocket&&) = delete;
+    CANFDSocket& operator=(CANFDSocket&&) = delete;
 
+    // Write frames. Returns number sent, -1 if error (check errno)
     size_t write_batch(const can_frame* frames, size_t count, int timeout_us = 0) override;
+
+    // Read frames. Returns number received, -1 if error (check errno)
     size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0) override;
+
     bool is_ready() const override;
     size_t get_max_payload_size() const override;
 
@@ -56,14 +60,14 @@ private:
     int socket_fd_ = -1;
 
     // Pre-allocated buffers for batch operations (avoid allocation in RT path)
-    std::array<struct canfd_frame, MAX_PENDING_FRAMES> send_canfd_frames_;
-    std::array<struct canfd_frame, MAX_PENDING_FRAMES> recv_canfd_frames_;
-    std::array<struct mmsghdr, MAX_PENDING_FRAMES> send_msgs_;
-    std::array<struct iovec, MAX_PENDING_FRAMES> send_iovecs_;
-    std::array<struct mmsghdr, MAX_PENDING_FRAMES> recv_msgs_;
-    std::array<struct iovec, MAX_PENDING_FRAMES> recv_iovecs_;
+    std::array<struct canfd_frame, MAX_FRAMES> send_canfd_frames_;
+    std::array<struct canfd_frame, MAX_FRAMES> recv_canfd_frames_;
+    std::array<struct mmsghdr, MAX_FRAMES> send_msgs_;
+    std::array<struct iovec, MAX_FRAMES> send_iovecs_;
+    std::array<struct mmsghdr, MAX_FRAMES> recv_msgs_;
+    std::array<struct iovec, MAX_FRAMES> recv_iovecs_;
 };
 
-}  // namespace openarm::realtime
+}  // namespace openarm::realtime::can
 
-#endif  // OPENARM_REALTIME_CANFD_TRANSPORT_HPP_
+#endif  // OPENARM_REALTIME_CANFD_HPP_

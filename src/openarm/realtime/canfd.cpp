@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "openarm/realtime/canfd_transport.hpp"
+#include "openarm/realtime/canfd.hpp"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -29,9 +29,9 @@
 #include <stdexcept>
 #include <string>
 
-namespace openarm::realtime {
+namespace openarm::realtime::can {
 
-CANFDTransport::CANFDTransport(const std::string& interface) {
+CANFDSocket::CANFDSocket(const std::string& interface) {
     // Create socket with CAN-FD support
     socket_fd_ = ::socket(PF_CAN, SOCK_RAW, CAN_RAW);
     if (socket_fd_ < 0) {
@@ -99,20 +99,20 @@ CANFDTransport::CANFDTransport(const std::string& interface) {
     }
 }
 
-CANFDTransport::~CANFDTransport() {
+CANFDSocket::~CANFDSocket() {
     if (socket_fd_ >= 0) {
         ::close(socket_fd_);
         socket_fd_ = -1;
     }
 }
 
-size_t CANFDTransport::write_batch(const can_frame* frames, size_t count, int timeout_us) {
+size_t CANFDSocket::write_batch(const can_frame* frames, size_t count, int timeout_us) {
     if (!frames || count == 0 || socket_fd_ < 0) {
         return 0;
     }
 
     // Cap to our pre-allocated buffer size
-    count = std::min(count, MAX_PENDING_FRAMES);
+    count = std::min(count, MAX_FRAMES);
 
     auto start_time = std::chrono::steady_clock::now();
 
@@ -176,13 +176,13 @@ size_t CANFDTransport::write_batch(const can_frame* frames, size_t count, int ti
     return sent;
 }
 
-size_t CANFDTransport::read_batch(can_frame* frames, size_t max_count, int timeout_us) {
+size_t CANFDSocket::read_batch(can_frame* frames, size_t max_count, int timeout_us) {
     if (!frames || max_count == 0 || socket_fd_ < 0) {
         return 0;
     }
 
     // Cap to our pre-allocated buffer size
-    max_count = std::min(max_count, MAX_PENDING_FRAMES);
+    max_count = std::min(max_count, MAX_FRAMES);
 
     auto start_time = std::chrono::steady_clock::now();
 
@@ -258,12 +258,12 @@ size_t CANFDTransport::read_batch(can_frame* frames, size_t max_count, int timeo
     return -1;
 }
 
-bool CANFDTransport::is_ready() const {
+bool CANFDSocket::is_ready() const {
     return socket_fd_ >= 0;
 }
 
-size_t CANFDTransport::get_max_payload_size() const {
+size_t CANFDSocket::get_max_payload_size() const {
     return 64;  // CAN-FD supports up to 64 bytes
 }
 
-}  // namespace openarm::realtime
+}  // namespace openarm::realtime::can

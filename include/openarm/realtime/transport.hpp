@@ -16,6 +16,7 @@
 #define OPENARM_REALTIME_TRANSPORT_HPP_
 
 #include <linux/can.h>
+
 #include <string>
 
 namespace openarm::realtime {
@@ -37,7 +38,7 @@ public:
      * @param frames Pointer to array of frames to send
      * @param count Number of frames to send
      * @param timeout_us Timeout in microseconds
-     * @return Number of frames successfully sent
+     * @return Number of frames successfully sent, or -1 if error (check errno)
      */
     virtual size_t write_batch(const can_frame* frames, size_t count, int timeout_us = 0) = 0;
 
@@ -46,7 +47,7 @@ public:
      * @param frames Pointer to array where received frames will be stored
      * @param max_count Maximum number of frames to receive
      * @param timeout_us Timeout in microseconds
-     * @return Number of frames successfully received
+     * @return Number of frames successfully received, or -1 if error (check errno)
      */
     virtual size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0) = 0;
 

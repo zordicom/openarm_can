@@ -30,40 +30,37 @@
 namespace openarm::realtime::can {
 
 // RT-safe CAN communication with non-blocking operations and no dynamic allocation.
+// RAII: Constructor opens CAN socket, destructor closes it.
 class CANSocket {
 public:
     static constexpr size_t MAX_PENDING_FRAMES = 64;
 
-    CANSocket() = default;
+    explicit CANSocket(const std::string& interface);
     ~CANSocket();
 
-    // Initialize CAN socket (call from non-RT context).
-    bool init(const std::string& interface);
+    // Delete copy/move to prevent socket confusion
+    CANSocket(const CANSocket&) = delete;
+    CANSocket& operator=(const CANSocket&) = delete;
+    CANSocket(CANSocket&&) = delete;
+    CANSocket& operator=(CANSocket&&) = delete;
 
-    // Close CAN socket.
-    void close();
-
-    // Non-blocking write with timeout (0 = no wait). Returns true if sent.
-    bool try_write(const can_frame& frame, int timeout_us = 0);
-
-    // Non-blocking read with timeout (0 = no wait). Returns true if received.
-    bool try_read(can_frame& frame, int timeout_us = 0);
-
-    // Batch write multiple frames. Returns number sent.
+    // Write frames. Returns number sent (pass count=1 for single frame).
     size_t write_batch(const can_frame* frames, size_t count, int timeout_us = 0);
 
-    // Batch read multiple frames. Returns number received.
+    // Read frames. Returns number received (pass max_count=1 for single frame).
     size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0);
 
     // Check if socket is initialized and ready.
     bool is_ready() const { return socket_fd_ >= 0; }
 
-    // Get errno from last failed operation (only set during init).
-    int get_last_errno() const { return last_errno_; }
-
 private:
     int socket_fd_ = -1;
-    int last_errno_ = 0;
+
+    // Pre-allocated buffers for batch operations (avoid allocation in RT path)
+    std::array<struct mmsghdr, MAX_PENDING_FRAMES> send_msgs_;
+    std::array<struct iovec, MAX_PENDING_FRAMES> send_iovecs_;
+    std::array<struct mmsghdr, MAX_PENDING_FRAMES> recv_msgs_;
+    std::array<struct iovec, MAX_PENDING_FRAMES> recv_iovecs_;
 };
 
 // Lock-free single-producer single-consumer ring buffer for CAN frames.

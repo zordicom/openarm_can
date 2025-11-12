@@ -106,7 +106,7 @@ CANFDSocket::~CANFDSocket() {
     }
 }
 
-size_t CANFDSocket::write_batch(const can_frame* frames, size_t count, int timeout_us) {
+ssize_t CANFDSocket::write_batch(const can_frame* frames, ssize_t count, int timeout_us) {
     if (!frames || count == 0 || socket_fd_ < 0) {
         return 0;
     }
@@ -117,7 +117,7 @@ size_t CANFDSocket::write_batch(const can_frame* frames, size_t count, int timeo
     auto start_time = std::chrono::steady_clock::now();
 
     // Convert can_frame to canfd_frame and setup mmsghdr structures
-    for (size_t i = 0; i < count; ++i) {
+    for (ssize_t i = 0; i < count; ++i) {
         // Convert standard CAN frame to CAN-FD frame
         memset(&send_canfd_frames_[i], 0, sizeof(struct canfd_frame));
         send_canfd_frames_[i].can_id = frames[i].can_id;
@@ -135,7 +135,7 @@ size_t CANFDSocket::write_batch(const can_frame* frames, size_t count, int timeo
         send_msgs_[i].msg_hdr.msg_iovlen = 1;
     }
 
-    size_t sent = 0;
+    ssize_t sent = 0;
 
     while (sent < count) {
         // Try to send remaining frames using sendmmsg (batch syscall)
@@ -176,7 +176,7 @@ size_t CANFDSocket::write_batch(const can_frame* frames, size_t count, int timeo
     return sent;
 }
 
-size_t CANFDSocket::read_batch(can_frame* frames, size_t max_count, int timeout_us) {
+ssize_t CANFDSocket::read_batch(can_frame* frames, ssize_t max_count, int timeout_us) {
     if (!frames || max_count == 0 || socket_fd_ < 0) {
         return 0;
     }
@@ -187,7 +187,7 @@ size_t CANFDSocket::read_batch(can_frame* frames, size_t max_count, int timeout_
     auto start_time = std::chrono::steady_clock::now();
 
     // Setup mmsghdr structures using pre-allocated buffers
-    for (size_t i = 0; i < max_count; ++i) {
+    for (ssize_t i = 0; i < max_count; ++i) {
         recv_iovecs_[i].iov_base = &recv_canfd_frames_[i];
         recv_iovecs_[i].iov_len = sizeof(struct canfd_frame);
 

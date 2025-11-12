@@ -36,7 +36,7 @@ namespace openarm::realtime::can {
  */
 class CANFDSocket : public IOpenArmTransport {
 public:
-    static constexpr size_t MAX_FRAMES = 64;
+    static constexpr ssize_t MAX_FRAMES = 64;
 
     explicit CANFDSocket(const std::string& interface);
     ~CANFDSocket() override;
@@ -48,10 +48,10 @@ public:
     CANFDSocket& operator=(CANFDSocket&&) = delete;
 
     // Write frames. Returns number sent, -1 if error (check errno)
-    size_t write_batch(const can_frame* frames, size_t count, int timeout_us = 0) override;
+    ssize_t write_batch(const can_frame* frames, ssize_t count, int timeout_us = 0) override;
 
     // Read frames. Returns number received, -1 if error (check errno)
-    size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0) override;
+    ssize_t read_batch(can_frame* frames, ssize_t max_count, int timeout_us = 0) override;
 
     size_t get_max_payload_size() const override;
 

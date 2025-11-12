@@ -65,7 +65,7 @@ int OpenArm::add_motor(damiao_motor::MotorType motor_type, uint32_t send_can_id,
     return motor_count_++;
 }
 
-size_t OpenArm::enable_all_motors_rt(int timeout_us) {
+ssize_t OpenArm::enable_all_motors_rt(int timeout_us) {
     if (!transport_) {
         errno = EINVAL;
         return 0;
@@ -74,7 +74,7 @@ size_t OpenArm::enable_all_motors_rt(int timeout_us) {
     return transport_->write_batch(tx_enable_.data(), motor_count_, timeout_us);
 }
 
-size_t OpenArm::disable_all_motors_rt(int timeout_us) {
+ssize_t OpenArm::disable_all_motors_rt(int timeout_us) {
     if (!transport_) {
         errno = EINVAL;
         return 0;
@@ -83,7 +83,7 @@ size_t OpenArm::disable_all_motors_rt(int timeout_us) {
     return transport_->write_batch(tx_disable_.data(), motor_count_, timeout_us);
 }
 
-size_t OpenArm::set_zero_all_motors_rt(int timeout_us) {
+ssize_t OpenArm::set_zero_all_motors_rt(int timeout_us) {
     if (!transport_) {
         errno = EINVAL;
         return 0;
@@ -92,7 +92,7 @@ size_t OpenArm::set_zero_all_motors_rt(int timeout_us) {
     return transport_->write_batch(tx_zero_.data(), motor_count_, timeout_us);
 }
 
-size_t OpenArm::refresh_all_motors_rt(int timeout_us) {
+ssize_t OpenArm::refresh_all_motors_rt(int timeout_us) {
     if (!transport_) {
         errno = EINVAL;
         return 0;
@@ -102,7 +102,7 @@ size_t OpenArm::refresh_all_motors_rt(int timeout_us) {
     return transport_->write_batch(tx_refresh_.data(), motor_count_, timeout_us);
 }
 
-size_t OpenArm::write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value, int timeout_us) {
+ssize_t OpenArm::write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value, int timeout_us) {
     if (!transport_) {
         errno = EINVAL;
         return 0;
@@ -130,16 +130,16 @@ size_t OpenArm::write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t valu
     return transport_->write_batch(tx_cmd_.data(), motor_count_, timeout_us);
 }
 
-size_t OpenArm::send_mit_batch_rt(const damiao_motor::MITParam* params, size_t count,
-                                  int timeout_us) {
+ssize_t OpenArm::send_mit_batch_rt(const damiao_motor::MITParam* params, ssize_t count,
+                                   int timeout_us) {
     if (!transport_ || !params) {
         errno = EINVAL;
         return 0;
     }
 
-    size_t n = std::min(count, motor_count_);
+    ssize_t n = std::min(count, static_cast<ssize_t>(motor_count_));
 
-    for (size_t i = 0; i < n; ++i) {
+    for (ssize_t i = 0; i < n; ++i) {
         auto packet =
             damiao_motor::CanPacketEncoder::create_mit_control_command(*motors_[i], params[i]);
         packet_to_frame(packet, tx_cmd_[i]);
@@ -149,16 +149,16 @@ size_t OpenArm::send_mit_batch_rt(const damiao_motor::MITParam* params, size_t c
     return transport_->write_batch(tx_cmd_.data(), n, timeout_us);
 }
 
-size_t OpenArm::send_posvel_batch_rt(const damiao_motor::PosVelParam* params, size_t count,
-                                     int timeout_us) {
+ssize_t OpenArm::send_posvel_batch_rt(const damiao_motor::PosVelParam* params, ssize_t count,
+                                      int timeout_us) {
     if (!transport_ || !params) {
         errno = EINVAL;
         return 0;
     }
 
-    size_t n = std::min(count, motor_count_);
+    ssize_t n = std::min(count, static_cast<ssize_t>(motor_count_));
 
-    for (size_t i = 0; i < n; ++i) {
+    for (ssize_t i = 0; i < n; ++i) {
         auto packet =
             damiao_motor::CanPacketEncoder::create_pos_vel_control_command(*motors_[i], params[i]);
         packet_to_frame(packet, tx_cmd_[i]);
@@ -168,23 +168,23 @@ size_t OpenArm::send_posvel_batch_rt(const damiao_motor::PosVelParam* params, si
     return transport_->write_batch(tx_cmd_.data(), n, timeout_us);
 }
 
-size_t OpenArm::receive_states_batch_rt(damiao_motor::StateResult* states, size_t max_count,
-                                        int timeout_us) {
+ssize_t OpenArm::receive_states_batch_rt(damiao_motor::StateResult* states, ssize_t max_count,
+                                         int timeout_us) {
     if (!transport_ || !states) {
         errno = EINVAL;
         return 0;
     }
 
-    for (size_t i = 0; i < std::min(max_count, motor_count_); ++i) {
+    for (ssize_t i = 0; i < std::min(max_count, static_cast<ssize_t>(motor_count_)); ++i) {
         states[i].valid = false;
     }
 
     // Receive CAN frames
-    size_t n =
-        transport_->read_batch(rx_frames_.data(), std::min(max_count, MAX_CAN_FRAMES), timeout_us);
+    ssize_t n =
+        transport_->read_batch(rx_frames_.data(), std::min(max_count, static_cast<ssize_t>(MAX_CAN_FRAMES)), timeout_us);
 
     // Decode received frames
-    for (size_t i = 0; i < n; ++i) {
+    for (ssize_t i = 0; i < n; ++i) {
         // Find motor index from CAN ID (standard 11-bit IDs)
         uint32_t can_id = rx_frames_[i].can_id & CAN_SFF_MASK;
         if (can_id >= recv_id_to_motor_index_.size()) {
@@ -221,10 +221,10 @@ bool OpenArm::set_mode_all_rt(ControlMode mode, int timeout_us) {
     // This function is kept for compatibility but should not be used
 
     // Use the proper parameter write method
-    size_t written = write_param_all_rt(openarm::damiao_motor::RID::CTRL_MODE,
-                                        static_cast<uint32_t>(mode), timeout_us);
+    ssize_t written = write_param_all_rt(openarm::damiao_motor::RID::CTRL_MODE,
+                                         static_cast<uint32_t>(mode), timeout_us);
 
-    return written == motor_count_;
+    return written == static_cast<ssize_t>(motor_count_);
 }
 
 void OpenArm::encode_simple_command(const damiao_motor::Motor& motor, uint8_t cmd,

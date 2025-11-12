@@ -93,7 +93,7 @@ CANSocket::~CANSocket() {
     }
 }
 
-size_t CANSocket::write_batch(const can_frame* frames, size_t count, int timeout_us) {
+ssize_t CANSocket::write_batch(const can_frame* frames, ssize_t count, int timeout_us) {
     if (!frames || count == 0 || socket_fd_ < 0) {
         return 0;
     }
@@ -104,7 +104,7 @@ size_t CANSocket::write_batch(const can_frame* frames, size_t count, int timeout
     auto start_time = steady_clock::now();
 
     // Setup mmsghdr structures using pre-allocated buffers
-    for (size_t i = 0; i < count; ++i) {
+    for (ssize_t i = 0; i < count; ++i) {
         send_iovecs_[i].iov_base = const_cast<can_frame*>(&frames[i]);
         send_iovecs_[i].iov_len = sizeof(can_frame);
 
@@ -113,7 +113,7 @@ size_t CANSocket::write_batch(const can_frame* frames, size_t count, int timeout
         send_msgs_[i].msg_hdr.msg_iovlen = 1;
     }
 
-    size_t sent = 0;
+    ssize_t sent = 0;
 
     while (sent < count) {
         // Try to send remaining frames
@@ -152,7 +152,7 @@ size_t CANSocket::write_batch(const can_frame* frames, size_t count, int timeout
     return sent;
 }
 
-size_t CANSocket::read_batch(can_frame* frames, size_t max_count, int timeout_us) {
+ssize_t CANSocket::read_batch(can_frame* frames, ssize_t max_count, int timeout_us) {
     if (!frames || max_count == 0 || socket_fd_ < 0) {
         return 0;
     }
@@ -163,7 +163,7 @@ size_t CANSocket::read_batch(can_frame* frames, size_t max_count, int timeout_us
     auto start_time = steady_clock::now();
 
     // Setup mmsghdr structures using pre-allocated buffers
-    for (size_t i = 0; i < max_count; ++i) {
+    for (ssize_t i = 0; i < max_count; ++i) {
         recv_iovecs_[i].iov_base = &frames[i];
         recv_iovecs_[i].iov_len = sizeof(can_frame);
 

@@ -40,7 +40,7 @@ public:
      * @param timeout_us Timeout in microseconds
      * @return Number of frames successfully sent, or -1 if error (check errno)
      */
-    virtual size_t write_batch(const can_frame* frames, size_t count, int timeout_us = 0) = 0;
+    virtual ssize_t write_batch(const can_frame* frames, ssize_t count, int timeout_us = 0) = 0;
 
     /**
      * @brief Read frames from the CAN bus
@@ -49,7 +49,7 @@ public:
      * @param timeout_us Timeout in microseconds
      * @return Number of frames successfully received, or -1 if error (check errno)
      */
-    virtual size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0) = 0;
+    virtual ssize_t read_batch(can_frame* frames, ssize_t max_count, int timeout_us = 0) = 0;
 
     /**
      * @brief Get the maximum payload size supported by this transport

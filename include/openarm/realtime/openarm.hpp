@@ -52,31 +52,31 @@ public:
 
     // RT-safe command methods (non-blocking)
     // Send enable command to all motors. Returns number sent.
-    size_t enable_all_motors_rt(int timeout_us = 500);
+    ssize_t enable_all_motors_rt(int timeout_us = 500);
 
     // Send disable command to all motors. Returns number sent.
-    size_t disable_all_motors_rt(int timeout_us = 500);
+    ssize_t disable_all_motors_rt(int timeout_us = 500);
 
     // Send set zero command to all motors. Returns number sent.
-    size_t set_zero_all_motors_rt(int timeout_us = 500);
+    ssize_t set_zero_all_motors_rt(int timeout_us = 500);
 
     // Send refresh/state request to all motors. Returns number sent.
-    size_t refresh_all_motors_rt(int timeout_us = 500);
+    ssize_t refresh_all_motors_rt(int timeout_us = 500);
 
     // Write parameter to all motors. Returns number sent.
-    size_t write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value, int timeout_us = 500);
+    ssize_t write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value, int timeout_us = 500);
 
     // Send MIT control commands batch. Returns number sent.
-    size_t send_mit_batch_rt(const damiao_motor::MITParam* params, size_t count,
-                             int timeout_us = 500);
+    ssize_t send_mit_batch_rt(const damiao_motor::MITParam* params, ssize_t count,
+                              int timeout_us = 500);
 
     // Send position/velocity control commands batch. Returns number sent.
-    size_t send_posvel_batch_rt(const damiao_motor::PosVelParam* params, size_t count,
-                                int timeout_us = 500);
+    ssize_t send_posvel_batch_rt(const damiao_motor::PosVelParam* params, ssize_t count,
+                                 int timeout_us = 500);
 
     // Receive motor states batch. Returns number received.
-    size_t receive_states_batch_rt(damiao_motor::StateResult* states, size_t max_count,
-                                   int timeout_us = 500);
+    ssize_t receive_states_batch_rt(damiao_motor::StateResult* states, ssize_t max_count,
+                                    int timeout_us = 500);
 
     // Set control mode for all motors. Returns true if successful for all.
     bool set_mode_all_rt(ControlMode mode, int timeout_us = 500);

@@ -31,9 +31,7 @@
 
 namespace openarm::realtime::can {
 
-// RT-safe CAN communication with non-blocking operations and no dynamic allocation.
 // Implements IOpenArmTransport interface for classical CAN (up to 8 bytes per frame).
-// RAII: Constructor opens CAN socket, destructor closes it.
 class CANSocket : public IOpenArmTransport {
 public:
     static constexpr size_t MAX_FRAMES = 64;
@@ -52,9 +50,6 @@ public:
 
     // Read frames. Returns number received, -1 if error (check errno)
     size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0) override;
-
-    // Check if socket is initialized and ready.
-    bool is_ready() const override { return socket_fd_ >= 0; }
 
     // Get max payload size for classical CAN
     size_t get_max_payload_size() const override { return 8; }

@@ -20,8 +20,8 @@ namespace openarm::realtime {
 
 OpenArm::OpenArm(std::unique_ptr<IOpenArmTransport> transport)
     : transport_(std::move(transport)) {
-    if (!transport_ || !transport_->is_ready()) {
-        throw std::runtime_error("Invalid or unready transport provided to OpenArm");
+    if (!transport_) {
+        throw std::runtime_error("Invalid transport provided to OpenArm");
     }
 
     // Initialize motor ID lookup table
@@ -66,7 +66,7 @@ int OpenArm::add_motor(damiao_motor::MotorType motor_type, uint32_t send_can_id,
 }
 
 size_t OpenArm::enable_all_motors_rt(int timeout_us) {
-    if (!transport_ || !transport_->is_ready()) {
+    if (!transport_) {
         return 0;
     }
 
@@ -74,7 +74,7 @@ size_t OpenArm::enable_all_motors_rt(int timeout_us) {
 }
 
 size_t OpenArm::disable_all_motors_rt(int timeout_us) {
-    if (!transport_ || !transport_->is_ready()) {
+    if (!transport_) {
         return 0;
     }
 
@@ -82,7 +82,7 @@ size_t OpenArm::disable_all_motors_rt(int timeout_us) {
 }
 
 size_t OpenArm::set_zero_all_motors_rt(int timeout_us) {
-    if (!transport_ || !transport_->is_ready()) {
+    if (!transport_) {
         return 0;
     }
 
@@ -90,7 +90,7 @@ size_t OpenArm::set_zero_all_motors_rt(int timeout_us) {
 }
 
 size_t OpenArm::refresh_all_motors_rt(int timeout_us) {
-    if (!transport_ || !transport_->is_ready()) {
+    if (!transport_) {
         return 0;
     }
 
@@ -99,7 +99,7 @@ size_t OpenArm::refresh_all_motors_rt(int timeout_us) {
 }
 
 size_t OpenArm::write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value, int timeout_us) {
-    if (!transport_ || !transport_->is_ready()) {
+    if (!transport_) {
         return 0;
     }
 
@@ -127,7 +127,7 @@ size_t OpenArm::write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t valu
 
 size_t OpenArm::send_mit_batch_rt(const damiao_motor::MITParam* params, size_t count,
                                   int timeout_us) {
-    if (!transport_ || !transport_->is_ready() || !params) {
+    if (!transport_ || !params) {
         return 0;
     }
 
@@ -145,7 +145,7 @@ size_t OpenArm::send_mit_batch_rt(const damiao_motor::MITParam* params, size_t c
 
 size_t OpenArm::send_posvel_batch_rt(const damiao_motor::PosVelParam* params, size_t count,
                                      int timeout_us) {
-    if (!transport_ || !transport_->is_ready() || !params) {
+    if (!transport_ || !params) {
         return 0;
     }
 
@@ -163,7 +163,7 @@ size_t OpenArm::send_posvel_batch_rt(const damiao_motor::PosVelParam* params, si
 
 size_t OpenArm::receive_states_batch_rt(damiao_motor::StateResult* states, size_t max_count,
                                         int timeout_us) {
-    if (!transport_ || !transport_->is_ready() || !states) {
+    if (!transport_ || !states) {
         return 0;
     }
 

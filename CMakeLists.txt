@@ -32,6 +32,7 @@ include(GNUInstallDirs)
 add_library(
   openarm_can_realtime
   src/openarm/realtime/can.cpp
+  src/openarm/realtime/canfd.cpp
   src/openarm/realtime/openarm.cpp
   src/openarm/damiao_motor/dm_motor.cpp
   src/openarm/damiao_motor/dm_motor_control.cpp)

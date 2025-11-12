@@ -52,12 +52,6 @@ public:
     virtual size_t read_batch(can_frame* frames, size_t max_count, int timeout_us = 0) = 0;
 
     /**
-     * @brief Check if transport is ready
-     * @return true if ready, false otherwise
-     */
-    virtual bool is_ready() const = 0;
-
-    /**
      * @brief Get the maximum payload size supported by this transport
      * @return Maximum data bytes per frame (8 for CAN, up to 64 for CAN-FD)
      */

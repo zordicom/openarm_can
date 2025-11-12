@@ -30,8 +30,8 @@ CANSocket::CANSocket(const std::string& interface) {
     // Create socket
     socket_fd_ = ::socket(PF_CAN, SOCK_RAW, CAN_RAW);
     if (socket_fd_ < 0) {
-        throw std::runtime_error(
-            "Failed to create CAN socket (errno: " + std::to_string(errno) + ")");
+        throw std::runtime_error("Failed to create CAN socket (errno: " + std::to_string(errno) +
+                                 ")");
     }
 
     // Get interface index
@@ -62,8 +62,8 @@ CANSocket::CANSocket(const std::string& interface) {
     // Increase socket buffer sizes to prevent drops during burst I/O
     // TX buffer: Need room for at least 8 frames (8 motors) + margin
     // RX buffer: Need room for responses that arrive while we're sending
-    int tx_buf_size = 65536;  // 64KB
-    int rx_buf_size = 65536;  // 64KB
+    static constexpr int tx_buf_size = 64 * 1024;  // 64KB
+    static constexpr int rx_buf_size = 64 * 1024;  // 64KB
 
     setsockopt(socket_fd_, SOL_SOCKET, SO_SNDBUF, &tx_buf_size, sizeof(tx_buf_size));
     setsockopt(socket_fd_, SOL_SOCKET, SO_RCVBUF, &rx_buf_size, sizeof(rx_buf_size));
@@ -81,7 +81,8 @@ CANSocket::CANSocket(const std::string& interface) {
     if (fcntl(socket_fd_, F_SETFL, flags) < 0) {
         int err = errno;
         ::close(socket_fd_);
-        throw std::runtime_error("Failed to set non-blocking mode (errno: " + std::to_string(err) + ")");
+        throw std::runtime_error("Failed to set non-blocking mode (errno: " + std::to_string(err) +
+                                 ")");
     }
 }
 
@@ -98,7 +99,7 @@ size_t CANSocket::write_batch(const can_frame* frames, size_t count, int timeout
     }
 
     // Cap to our pre-allocated buffer size
-    count = std::min(count, MAX_PENDING_FRAMES);
+    count = std::min(count, MAX_FRAMES);
 
     auto start_time = steady_clock::now();
 
@@ -157,7 +158,7 @@ size_t CANSocket::read_batch(can_frame* frames, size_t max_count, int timeout_us
     }
 
     // Cap to our pre-allocated buffer size
-    max_count = std::min(max_count, MAX_PENDING_FRAMES);
+    max_count = std::min(max_count, MAX_FRAMES);
 
     auto start_time = steady_clock::now();
 

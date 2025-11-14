@@ -76,7 +76,7 @@ public:
     static CANPacket create_refresh_command(const Motor& motor);
 
 private:
-    static std::vector<uint8_t> pack_mit_control_data(MotorType motor_type,
+    static std::vector<uint8_t> pack_mit_control_data(const Motor& motor,
                                                       const MITParam& mit_param);
     static std::vector<uint8_t> pack_pos_vel_control_data(const PosVelParam& pos_vel_param);
     static std::vector<uint8_t> pack_query_param_data(uint32_t send_can_id, int RID);
@@ -93,6 +93,7 @@ public:
     static StateResult parse_motor_state_data(const Motor& motor, const std::vector<uint8_t>& data);
     static StateResult parse_motor_state_data(const Motor& motor, const uint8_t* data, size_t len);
     static ParamResult parse_motor_param_data(const std::vector<uint8_t>& data);
+    static ParamResult parse_motor_param_data(const uint8_t* data, size_t len);
 
 private:
     static double uint_to_double(uint16_t x, double min, double max, int bits);

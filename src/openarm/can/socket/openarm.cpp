@@ -42,9 +42,9 @@ void OpenArm::init_arm_motors(const std::vector<damiao_motor::MotorType>& motor_
     register_dm_device_collection(*arm_);
 }
 
-void OpenArm::init_gripper_motor(damiao_motor::MotorType motor_type, uint32_t send_can_id,
+void OpenArm::init_gripper_motor(damiao_motor::MotorType /*motor_type*/, uint32_t send_can_id,
                                  uint32_t recv_can_id) {
-    gripper_->init_motor_device(motor_type, send_can_id, recv_can_id, enable_fd_);
+    gripper_->init_motor_device(send_can_id, recv_can_id, enable_fd_);
     register_dm_device_collection(*gripper_);
 }
 

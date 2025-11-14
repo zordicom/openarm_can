@@ -46,7 +46,7 @@ public:
 
     // Add a motor to the interface (call from non-RT context). Returns motor index or -1 on
     // failure.
-    int add_motor(damiao_motor::MotorType motor_type, uint32_t send_can_id, uint32_t recv_can_id);
+    int add_motor(uint32_t send_can_id, uint32_t recv_can_id);
 
     size_t get_motor_count() const { return motor_count_; }
 
@@ -64,7 +64,8 @@ public:
     ssize_t refresh_all_motors_rt(int timeout_us = 500);
 
     // Write parameter to all motors. Returns number sent.
-    ssize_t write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value, int timeout_us = 500);
+    ssize_t write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value,
+                               int timeout_us = 500);
 
     // Send MIT control commands batch. Returns number sent.
     ssize_t send_mit_batch_rt(const damiao_motor::MITParam* params, ssize_t count,
@@ -86,6 +87,9 @@ private:
     std::array<std::unique_ptr<damiao_motor::Motor>, MAX_MOTORS> motors_;
     size_t motor_count_ = 0;
 
+    // Track if limits have been loaded
+    bool limits_loaded_ = false;
+
     // Pre-allocated CAN frame buffers
     std::array<can_frame, MAX_MOTORS> tx_cmd_;
     std::array<can_frame, MAX_CAN_FRAMES> rx_frames_;
@@ -100,9 +104,13 @@ private:
 
     // Motor CAN ID to motor index. Assumes CAN IDs don't exceed MAX_MOTOR_CAN_ID.
     std::array<int, MAX_MOTOR_CAN_ID> recv_id_to_motor_index_;
+    std::array<int, MAX_MOTOR_CAN_ID> send_id_to_motor_index_;
 
     // Helper methods
     void encode_simple_command(const damiao_motor::Motor& motor, uint8_t cmd, can_frame& frame);
+
+    // Read and set limit parameters from all motors (non-RT, called before first enable)
+    bool load_limits_from_motors(int timeout_ms = 1000);
 
     // Convert CAN packet to frame (inline for performance in RT loop)
     inline static void packet_to_frame(const damiao_motor::CANPacket& packet, can_frame& frame) {

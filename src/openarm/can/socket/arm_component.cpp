@@ -28,15 +28,21 @@ void ArmComponent::init_motor_devices(const std::vector<damiao_motor::MotorType>
                                       const std::vector<canid_t>& recv_can_ids, bool use_fd) {
     // Reserve space to prevent vector reallocation that would invalidate motor
     // references
-    motors_.reserve(motor_types.size());
+    motors_.reserve(send_can_ids.size());
 
-    for (size_t i = 0; i < motor_types.size(); i++) {
-        // First, create and store the motor in the vector
-        motors_.emplace_back(motor_types[i], send_can_ids[i], recv_can_ids[i]);
+    for (size_t i = 0; i < send_can_ids.size(); i++) {
+        // Create motor without limits (will be read from hardware later)
+        motors_.emplace_back(send_can_ids[i], recv_can_ids[i]);
         // Then create the device with a reference to the stored motor
         auto motor_device =
             std::make_shared<damiao_motor::DMCANDevice>(motors_.back(), CAN_SFF_MASK, use_fd);
         get_device_collection().add_device(motor_device);
+    }
+
+    // Read limits from motors and set them
+    auto limits = read_limits_from_motors();
+    for (size_t i = 0; i < send_can_ids.size(); i++) {
+        motors_[i].set_limit(limits[i]);
     }
 }
 

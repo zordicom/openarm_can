@@ -28,8 +28,7 @@ public:
     GripperComponent(canbus::CANSocket& can_socket);
     ~GripperComponent() = default;
 
-    void init_motor_device(damiao_motor::MotorType motor_type, uint32_t send_can_id,
-                           uint32_t recv_can_id, bool use_fd);
+    void init_motor_device(uint32_t send_can_id, uint32_t recv_can_id, bool use_fd);
 
     // Gripper-specific controls
     void open(double kp = 50.0, double kd = 1.0);

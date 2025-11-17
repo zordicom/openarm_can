@@ -41,8 +41,8 @@ public:
 
     // Error checking
     bool has_unrecoverable_error() const {
-        // Error codes: 0x1 = no error, 0x8-0xE = unrecoverable errors
-        return state_error_ != 0x1 && state_error_ >= 0x8 && state_error_ <= 0xE;
+        // Error is indicated by upper 3 bits of status nibble (any non-zero value in bits 1-3)
+        return state_error_ != 0;
     }
 
     // Motor property getters

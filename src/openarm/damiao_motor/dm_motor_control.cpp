@@ -66,11 +66,15 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
                                                      const std::vector<uint8_t>& data) {
     if (data.size() < 8) {
         std::cerr << "Warning: Skipping motor state data less than 8 bytes" << std::endl;
-        return {0, 0, 0, 0, 0, 0, false};
+        return {0, 0, 0, 0, 0, 0, false, false};
     }
 
-    // Parse error code from upper 4 bits of byte 0
-    uint8_t error_code = (data[0] >> 4) & 0x0F;
+    // Parse status from upper 4 bits of byte 0
+    uint8_t status_nibble = (data[0] >> 4) & 0x0F;
+
+    // Extract enabled state and error code from status nibble
+    uint8_t error_code = status_nibble & 0xE;  // Upper 3 bits contain error code
+    bool enabled = status_nibble & 0x1;         // Lower bit indicates enabled state
 
     // Parse state data
     uint16_t q_uint = (static_cast<uint16_t>(data[1]) << 8) | data[2];
@@ -85,7 +89,7 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
     if (!limit_opt.has_value()) {
         std::cerr << "ERROR: Motor " << motor.get_send_can_id()
                   << " has no limit parameters set. Call enable to load limits from motor." << std::endl;
-        return {0, 0, 0, 0, 0, 0, false};
+        return {0, 0, 0, 0, 0, 0, false, false};
     }
 
     LimitParam limits = limit_opt.value();
@@ -93,18 +97,22 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
     double recv_dq = CanPacketDecoder::uint_to_double(dq_uint, -limits.vMax, limits.vMax, 12);
     double recv_tau = CanPacketDecoder::uint_to_double(tau_uint, -limits.tMax, limits.tMax, 12);
 
-    return {recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, true};
+    return {recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, enabled, true};
 }
 
 StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor, const uint8_t* data,
                                                      size_t len) {
     if (len < 8) {
         std::cerr << "Warning: Skipping motor state data less than 8 bytes" << std::endl;
-        return {0, 0, 0, 0, 0, 0, false};
+        return {0, 0, 0, 0, 0, 0, false, false};
     }
 
-    // Parse error code from upper 4 bits of byte 0
-    uint8_t error_code = (data[0] >> 4) & 0x0F;
+    // Parse status from upper 4 bits of byte 0
+    uint8_t status_nibble = (data[0] >> 4) & 0x0F;
+
+    // Extract enabled state and error code from status nibble
+    uint8_t error_code = status_nibble & 0xE;  // Upper 3 bits contain error code
+    bool enabled = status_nibble & 0x1;         // Lower bit indicates enabled state
 
     // Parse state data
     uint16_t q_uint = (static_cast<uint16_t>(data[1]) << 8) | data[2];
@@ -119,7 +127,7 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor, const u
     if (!limit_opt.has_value()) {
         std::cerr << "ERROR: Motor " << motor.get_send_can_id()
                   << " has no limit parameters set. Call enable to load limits from motor." << std::endl;
-        return {0, 0, 0, 0, 0, 0, false};
+        return {0, 0, 0, 0, 0, 0, false, false};
     }
 
     LimitParam limits = limit_opt.value();
@@ -127,7 +135,7 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor, const u
     double recv_dq = CanPacketDecoder::uint_to_double(dq_uint, -limits.vMax, limits.vMax, 12);
     double recv_tau = CanPacketDecoder::uint_to_double(tau_uint, -limits.tMax, limits.tMax, 12);
 
-    return {recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, true};
+    return {recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, enabled, true};
 }
 
 ParamResult CanPacketDecoder::parse_motor_param_data(const std::vector<uint8_t>& data) {

@@ -27,6 +27,43 @@ sudo apt install -y \
   openarm-can-utils
 ```
 
+#### AlmaLinux, CentOS, Fedora, RHEL, and Rocky Linux
+
+1. Enable [EPEL](https://docs.fedoraproject.org/en-US/epel/). (Not required for [Fedora](https://fedoraproject.org/))
+   * AlmaLinux 8 / Rocky Linux 8
+     ```bash
+     sudo dnf install -y epel-release
+     sudo dnf config-manager --set-enabled powertools
+     ```
+   * AlmaLinux 9 & 10 / Rocky Linux 9 & 10
+     ```bash
+     sudo dnf install -y epel-release
+     sudo crb enable
+     ```
+   * CentOS Stream 9
+     ```bash
+     sudo dnf config-manager --set-enabled crb
+     sudo dnf install -y https://dl.fedoraproject.org/pub/epel/epel{,-next}-release-latest-9.noarch.rpm
+     ```
+   * CentOS Stream 10
+     ```bash
+     sudo dnf config-manager --set-enabled crb
+     sudo dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
+     ```
+   * RHEL 8 & 9 & 10
+     ```bash
+     releasever="$(. /etc/os-release && echo $VERSION_ID | grep -oE '^[0-9]+')"
+     sudo subscription-manager repos --enable codeready-builder-for-rhel-$releasever-$(arch)-rpms
+     sudo dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-$releasever.noarch.rpm
+     ```
+2. Install the package.
+   ```bash
+   sudo dnf update
+   sudo dnf install -y \
+     openarm-can-devel \
+     openarm-can-utils
+   ```
+
 ### 2. Setup CAN Interface
 
 Configure your CAN interface using the provided script:

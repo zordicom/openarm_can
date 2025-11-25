@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
@@ -175,8 +176,7 @@ NB_MODULE(openarm_can, m) {
 
     // Motor class
     nb::class_<Motor>(m, "Motor")
-        .def(nb::init<MotorType, uint32_t, uint32_t>(), nb::arg("motor_type"),
-             nb::arg("send_can_id"), nb::arg("recv_can_id"))
+        .def(nb::init<uint32_t, uint32_t>(), nb::arg("send_can_id"), nb::arg("recv_can_id"))
         .def("get_position", &Motor::get_position)
         .def("get_velocity", &Motor::get_velocity)
         .def("get_torque", &Motor::get_torque)
@@ -186,10 +186,10 @@ NB_MODULE(openarm_can, m) {
         .def("has_unrecoverable_error", &Motor::has_unrecoverable_error)
         .def("get_send_can_id", &Motor::get_send_can_id)
         .def("get_recv_can_id", &Motor::get_recv_can_id)
-        .def("get_motor_type", &Motor::get_motor_type)
         .def("is_enabled", &Motor::is_enabled)
         .def("get_param", &Motor::get_param, nb::arg("rid"))
-        .def_static("get_limit_param", &Motor::get_limit_param, nb::arg("motor_type"));
+        .def("get_limit", &Motor::get_limit)
+        .def("set_limit", &Motor::set_limit, nb::arg("limit"));
 
     // MotorControl class
     nb::class_<CanPacketEncoder>(m, "CanPacketEncoder")
@@ -207,10 +207,16 @@ NB_MODULE(openarm_can, m) {
                     nb::arg("motor"), nb::arg("rid"));
 
     nb::class_<CanPacketDecoder>(m, "CanPacketDecoder")
-        .def_static("parse_motor_state_data", &CanPacketDecoder::parse_motor_state_data,
-                    nb::arg("motor"), nb::arg("data"))
-        .def_static("parse_motor_param_data", &CanPacketDecoder::parse_motor_param_data,
-                    nb::arg("data"));
+        .def_static(
+            "parse_motor_state_data",
+            static_cast<StateResult (*)(const Motor&, const std::vector<uint8_t>&)>(
+                &CanPacketDecoder::parse_motor_state_data),
+            nb::arg("motor"), nb::arg("data"))
+        .def_static(
+            "parse_motor_param_data",
+            static_cast<ParamResult (*)(const std::vector<uint8_t>&)>(
+                &CanPacketDecoder::parse_motor_param_data),
+            nb::arg("data"));
 
     // ============================================================================
     // CANBUS NAMESPACE - EXCEPTIONS AND BASE CLASSES
@@ -350,10 +356,13 @@ NB_MODULE(openarm_can, m) {
         .def("set_callback_mode_all", &DMDeviceCollection::set_callback_mode_all,
              nb::arg("callback_mode"))
         .def("query_param_all", &DMDeviceCollection::query_param_all, nb::arg("rid"))
+        .def("query_param_one", &DMDeviceCollection::query_param_one, nb::arg("index"),
+             nb::arg("rid"))
         .def("mit_control_one", &DMDeviceCollection::mit_control_one, nb::arg("index"),
              nb::arg("mit_param"))
         .def("mit_control_all", &DMDeviceCollection::mit_control_all, nb::arg("mit_params"))
         .def("get_motors", &DMDeviceCollection::get_motors)
+        .def("get_motor", &DMDeviceCollection::get_motor, nb::arg("index"))
         .def("get_device_collection", &DMDeviceCollection::get_device_collection,
              nb::rv_policy::reference);
 
@@ -366,7 +375,7 @@ NB_MODULE(openarm_can, m) {
     // GripperComponent class
     nb::class_<GripperComponent, DMDeviceCollection>(m, "GripperComponent")
         .def(nb::init<CANSocket&>(), nb::arg("can_socket"))
-        .def("init_motor_device", &GripperComponent::init_motor_device, nb::arg("motor_type"),
+        .def("init_motor_device", &GripperComponent::init_motor_device,
              nb::arg("send_can_id"), nb::arg("recv_can_id"), nb::arg("use_fd"))
         .def("open", &GripperComponent::open, nb::arg("kp") = 50.0, nb::arg("kd") = 1.0)
         .def("close", &GripperComponent::close, nb::arg("kp") = 50.0, nb::arg("kd") = 1.0)

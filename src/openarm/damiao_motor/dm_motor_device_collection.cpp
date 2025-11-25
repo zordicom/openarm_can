@@ -231,7 +231,7 @@ std::vector<LimitParam> DMDeviceCollection::read_limits_from_motors(int timeout_
         }
     }
 
-    // Collect limit parameters from each motor
+    // Collect limit parameters from each motor and set them
     for (auto dm_device : dm_devices) {
         auto& motor = dm_device->get_motor();
         LimitParam limit;
@@ -246,6 +246,8 @@ std::vector<LimitParam> DMDeviceCollection::read_limits_from_motors(int timeout_
             throw std::runtime_error("Failed to read motor limit parameters");
         }
 
+        // Set the limits on the motor so they're available for MIT control
+        motor.set_limit(limit);
         limits.push_back(limit);
     }
 

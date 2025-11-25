@@ -32,10 +32,13 @@
 #include <openarm/damiao_motor/dm_motor_control.hpp>
 #include <openarm/damiao_motor/dm_motor_device.hpp>
 #include <openarm/damiao_motor/dm_motor_device_collection.hpp>
+#include <openarm/realtime/can.hpp>
+#include <openarm/realtime/openarm.hpp>
 
 using namespace openarm::canbus;
 using namespace openarm::damiao_motor;
 using namespace openarm::can::socket;
+namespace rt = openarm::realtime;
 
 namespace nb = nanobind;
 
@@ -400,4 +403,69 @@ NB_MODULE(openarm_can, m) {
         .def("recv_all", &OpenArm::recv_all, nb::arg("timeout_us") = 500)
         .def("set_callback_mode_all", &OpenArm::set_callback_mode_all, nb::arg("callback_mode"))
         .def("query_param_all", &OpenArm::query_param_all, nb::arg("rid"));
+
+    // ============================================================================
+    // REALTIME NAMESPACE - RT-SAFE CLASSES
+    // ============================================================================
+
+    // RT ControlMode enum
+    nb::enum_<rt::ControlMode>(m, "RTControlMode")
+        .value("MIT", rt::ControlMode::MIT)
+        .value("POSITION_VELOCITY", rt::ControlMode::POSITION_VELOCITY)
+        .export_values();
+
+    // RT CANSocket transport class
+    nb::class_<rt::can::CANSocket>(m, "RTCANSocket")
+        .def(nb::init<const std::string&>(), nb::arg("interface"))
+        .def("get_max_payload_size", &rt::can::CANSocket::get_max_payload_size);
+
+    // RT OpenArm class (main RT-safe interface)
+    nb::class_<rt::OpenArm>(m, "RTOpenArm")
+        .def(
+            "__init__",
+            [](rt::OpenArm* self, const std::string& interface) {
+                auto transport = std::make_unique<rt::can::CANSocket>(interface);
+                new (self) rt::OpenArm(std::move(transport));
+            },
+            nb::arg("interface"))
+        .def("add_motor", &rt::OpenArm::add_motor, nb::arg("send_can_id"), nb::arg("recv_can_id"))
+        .def("get_motor_count", &rt::OpenArm::get_motor_count)
+        .def("enable_all_motors_rt", &rt::OpenArm::enable_all_motors_rt,
+             nb::arg("timeout_us") = 500)
+        .def("disable_all_motors_rt", &rt::OpenArm::disable_all_motors_rt,
+             nb::arg("timeout_us") = 500)
+        .def("set_zero_all_motors_rt", &rt::OpenArm::set_zero_all_motors_rt,
+             nb::arg("timeout_us") = 500)
+        .def("refresh_all_motors_rt", &rt::OpenArm::refresh_all_motors_rt,
+             nb::arg("timeout_us") = 500)
+        .def("write_param_all_rt", &rt::OpenArm::write_param_all_rt, nb::arg("rid"),
+             nb::arg("value"), nb::arg("timeout_us") = 500)
+        .def(
+            "send_mit_batch_rt",
+            [](rt::OpenArm& self, const std::vector<MITParam>& params, int timeout_us) {
+                return self.send_mit_batch_rt(params.data(), params.size(), timeout_us);
+            },
+            nb::arg("params"), nb::arg("timeout_us") = 500)
+        .def(
+            "send_posvel_batch_rt",
+            [](rt::OpenArm& self, const std::vector<PosVelParam>& params, int timeout_us) {
+                return self.send_posvel_batch_rt(params.data(), params.size(), timeout_us);
+            },
+            nb::arg("params"), nb::arg("timeout_us") = 500)
+        .def(
+            "receive_states_batch_rt",
+            [](rt::OpenArm& self, ssize_t max_count, int timeout_us) {
+                std::vector<StateResult> states(max_count);
+                ssize_t n = self.receive_states_batch_rt(states.data(), max_count, timeout_us);
+                if (n < 0) n = 0;
+                states.resize(self.get_motor_count());
+                return states;
+            },
+            nb::arg("max_count") = 10, nb::arg("timeout_us") = 500)
+        .def("set_mode_all_rt", &rt::OpenArm::set_mode_all_rt, nb::arg("mode"),
+             nb::arg("timeout_us") = 500)
+        .def("save_params_to_flash_rt", &rt::OpenArm::save_params_to_flash_rt,
+             nb::arg("timeout_us") = 500)
+        .def("save_params_to_flash_one_rt", &rt::OpenArm::save_params_to_flash_one_rt,
+             nb::arg("motor_index"), nb::arg("timeout_us") = 500);
 }

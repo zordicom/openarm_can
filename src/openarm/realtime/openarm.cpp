@@ -346,4 +346,49 @@ bool OpenArm::load_limits_from_motors(int timeout_ms) {
     return true;
 }
 
+ssize_t OpenArm::save_params_to_flash_rt(int timeout_us) {
+    if (!transport_) {
+        errno = EINVAL;
+        return 0;
+    }
+
+    // Build save commands for all motors
+    // Save command format: CAN ID 0x7FF, data = [motor_id_lo, motor_id_hi, 0xAA, 0, 0, 0, 0, 0]
+    for (size_t i = 0; i < motor_count_; ++i) {
+        can_frame& frame = tx_cmd_[i];
+        std::memset(&frame, 0, sizeof(frame));
+        frame.can_id = 0x7FF;
+        frame.len = 8;
+
+        uint32_t send_id = motors_[i]->get_send_can_id();
+        frame.data[0] = send_id & 0xFF;         // Motor ID low byte
+        frame.data[1] = (send_id >> 8) & 0xFF;  // Motor ID high byte
+        frame.data[2] = 0xAA;                   // Save to flash command
+        // data[3-7] = 0 (already zeroed by memset)
+    }
+
+    return transport_->write_batch(tx_cmd_.data(), motor_count_, timeout_us);
+}
+
+ssize_t OpenArm::save_params_to_flash_one_rt(size_t motor_index, int timeout_us) {
+    if (!transport_ || motor_index >= motor_count_) {
+        errno = EINVAL;
+        return 0;
+    }
+
+    // Build save command for single motor
+    can_frame frame;
+    std::memset(&frame, 0, sizeof(frame));
+    frame.can_id = 0x7FF;
+    frame.len = 8;
+
+    uint32_t send_id = motors_[motor_index]->get_send_can_id();
+    frame.data[0] = send_id & 0xFF;         // Motor ID low byte
+    frame.data[1] = (send_id >> 8) & 0xFF;  // Motor ID high byte
+    frame.data[2] = 0xAA;                   // Save to flash command
+    // data[3-7] = 0 (already zeroed by memset)
+
+    return transport_->write_batch(&frame, 1, timeout_us);
+}
+
 }  // namespace openarm::realtime

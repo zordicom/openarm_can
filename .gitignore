@@ -27,3 +27,5 @@
 /packages/yum/repositories/
 /packages/yum/tmp/
 python/subprojects/.wraplock
+
+__pycache__

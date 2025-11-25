@@ -36,6 +36,8 @@ enum class MotorType : uint8_t {
     COUNT = 13
 };
 
+enum class ControlMode : uint8_t { MIT = 1, POS_VEL = 2, VEL = 3, TORQUE_POS = 4 };
+
 enum class RID : uint8_t {
     UV_Value = 0,
     KT_Value = 1,
@@ -85,27 +87,10 @@ enum class RID : uint8_t {
     COUNT = 82
 };
 
-// Limit parameters structure for different motor types
+// Limit parameters structure read from motor hardware
 struct LimitParam {
     double pMax;  // Position limit (rad)
     double vMax;  // Velocity limit (rad/s)
     double tMax;  // Torque limit (Nm)
 };
-// Limit parameters for each motor type [pMax, vMax, tMax]
-inline constexpr std::array<LimitParam, static_cast<std::size_t>(MotorType::COUNT)>
-    MOTOR_LIMIT_PARAMS = {{
-        {12.5, 50, 5},    // DM3507
-        {12.5, 30, 10},   // DM4310
-        {12.5, 50, 10},   // DM4310_48V
-        {12.5, 8, 28},    // DM4340
-        {12.5, 10, 28},   // DM4340_48V
-        {12.5, 45, 20},   // DM6006
-        {12.5, 45, 40},   // DM8006
-        {12.5, 45, 54},   // DM8009
-        {12.5, 25, 200},  // DM10010L
-        {12.5, 20, 200},  // DM10010
-        {12.5, 280, 1},   // DMH3510
-        {12.5, 45, 10},   // DMH6215
-        {12.5, 45, 10}    // DMG6220
-    }};
 }  // namespace openarm::damiao_motor

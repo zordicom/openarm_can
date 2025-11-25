@@ -201,4 +201,58 @@ std::vector<std::shared_ptr<DMCANDevice>> DMDeviceCollection::get_dm_devices() c
     return dm_devices;
 }
 
+std::vector<LimitParam> DMDeviceCollection::read_limits_from_motors(int timeout_ms) {
+    std::vector<LimitParam> limits;
+    auto dm_devices = get_dm_devices();
+
+    // Set all devices to PARAM mode to receive parameter responses
+    set_callback_mode_all(CallbackMode::PARAM);
+
+    // Query PMAX, VMAX, TMAX for all motors
+    query_param_all(static_cast<int>(RID::PMAX));
+    query_param_all(static_cast<int>(RID::VMAX));
+    query_param_all(static_cast<int>(RID::TMAX));
+
+    // Receive responses with timeout
+    auto start_time = std::chrono::steady_clock::now();
+    while (std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now() - start_time).count() < timeout_ms) {
+        // Read frame from socket and dispatch to callbacks
+        if (can_socket_.is_canfd_enabled()) {
+            canfd_frame frame;
+            if (can_socket_.read_canfd_frame(frame)) {
+                device_collection_->dispatch_frame_callback(frame);
+            }
+        } else {
+            can_frame frame;
+            if (can_socket_.read_can_frame(frame)) {
+                device_collection_->dispatch_frame_callback(frame);
+            }
+        }
+    }
+
+    // Collect limit parameters from each motor
+    for (auto dm_device : dm_devices) {
+        auto& motor = dm_device->get_motor();
+        LimitParam limit;
+        limit.pMax = motor.get_param(static_cast<int>(RID::PMAX));
+        limit.vMax = motor.get_param(static_cast<int>(RID::VMAX));
+        limit.tMax = motor.get_param(static_cast<int>(RID::TMAX));
+
+        // Validate that we received all parameters
+        if (limit.pMax <= 0 || limit.vMax <= 0 || limit.tMax <= 0) {
+            std::cerr << "ERROR: Failed to read limit parameters from motor "
+                      << motor.get_send_can_id() << std::endl;
+            throw std::runtime_error("Failed to read motor limit parameters");
+        }
+
+        limits.push_back(limit);
+    }
+
+    // Reset callback mode to STATE
+    set_callback_mode_all(CallbackMode::STATE);
+
+    return limits;
+}
+
 }  // namespace openarm::damiao_motor

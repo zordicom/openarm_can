@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstring>
 #include <map>
+#include <optional>
 
 #include "dm_motor_constants.hpp"
 
@@ -28,7 +29,7 @@ class Motor {
 
 public:
     // Constructor
-    Motor(MotorType motor_type, uint32_t send_can_id, uint32_t recv_can_id);
+    Motor(uint32_t send_can_id, uint32_t recv_can_id);
 
     // State getters
     double get_position() const { return state_q_; }
@@ -40,14 +41,13 @@ public:
 
     // Error checking
     bool has_unrecoverable_error() const {
-        // Error codes: 0x1 = no error, 0x8-0xE = unrecoverable errors
-        return state_error_ != 0x1 && state_error_ >= 0x8 && state_error_ <= 0xE;
+        // Error is indicated by upper 3 bits of status nibble (any non-zero value in bits 1-3)
+        return state_error_ != 0;
     }
 
     // Motor property getters
     uint32_t get_send_can_id() const { return send_can_id_; }
     uint32_t get_recv_can_id() const { return recv_can_id_; }
-    MotorType get_motor_type() const { return motor_type_; }
 
     // Enable status getters
     bool is_enabled() const { return enabled_; }
@@ -55,8 +55,9 @@ public:
     // Parameter methods
     double get_param(int RID) const;
 
-    // Static methods for motor properties
-    static LimitParam get_limit_param(MotorType motor_type);
+    // Limit parameter accessors
+    std::optional<LimitParam> get_limit() const { return limit_; }
+    void set_limit(const LimitParam& limit) { limit_ = limit; }
 
 protected:
     // State update methods
@@ -69,7 +70,9 @@ protected:
     // Motor identifiers
     uint32_t send_can_id_;
     uint32_t recv_can_id_;
-    MotorType motor_type_;
+
+    // Motor limits (populated on first enable or manually)
+    std::optional<LimitParam> limit_;
 
     // Enable status
     bool enabled_;

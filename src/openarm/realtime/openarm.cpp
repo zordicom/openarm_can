@@ -18,8 +18,7 @@
 
 namespace openarm::realtime {
 
-OpenArm::OpenArm(std::unique_ptr<IOpenArmTransport> transport)
-    : transport_(std::move(transport)) {
+OpenArm::OpenArm(std::unique_ptr<IOpenArmTransport> transport) : transport_(std::move(transport)) {
     if (!transport_) {
         throw std::runtime_error("Invalid transport provided to OpenArm");
     }
@@ -30,14 +29,13 @@ OpenArm::OpenArm(std::unique_ptr<IOpenArmTransport> transport)
     motor_count_ = 0;
 }
 
-int OpenArm::add_motor(damiao_motor::MotorType motor_type, uint32_t send_can_id,
-                       uint32_t recv_can_id) {
+int OpenArm::add_motor(uint32_t send_can_id, uint32_t recv_can_id) {
     if (motor_count_ >= MAX_MOTORS) {
         errno = EINVAL;  // Too many motors
         return -1;
     }
 
-    auto motor = std::make_unique<damiao_motor::Motor>(motor_type, send_can_id, recv_can_id);
+    auto motor = std::make_unique<damiao_motor::Motor>(send_can_id, recv_can_id);
     // Create motor object
 
     if (recv_can_id >= recv_id_to_motor_index_.size()) {
@@ -46,6 +44,7 @@ int OpenArm::add_motor(damiao_motor::MotorType motor_type, uint32_t send_can_id,
     }
 
     recv_id_to_motor_index_[recv_can_id] = motor_count_;
+    send_id_to_motor_index_[send_can_id] = motor_count_;
 
     // Pre-allocate commands that don't change.
     encode_simple_command(*motor, 0xFC, tx_enable_[motor_count_]);
@@ -69,6 +68,16 @@ ssize_t OpenArm::enable_all_motors_rt(int timeout_us) {
     if (!transport_) {
         errno = EINVAL;
         return 0;
+    }
+
+    // Load limits from motors if not already loaded
+    if (!limits_loaded_) {
+        if (!load_limits_from_motors()) {
+            std::cerr << "ERROR: Failed to load motor limit parameters" << std::endl;
+            errno = EIO;
+            return 0;
+        }
+        limits_loaded_ = true;
     }
 
     return transport_->write_batch(tx_enable_.data(), motor_count_, timeout_us);
@@ -102,7 +111,8 @@ ssize_t OpenArm::refresh_all_motors_rt(int timeout_us) {
     return transport_->write_batch(tx_refresh_.data(), motor_count_, timeout_us);
 }
 
-ssize_t OpenArm::write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value, int timeout_us) {
+ssize_t OpenArm::write_param_all_rt(openarm::damiao_motor::RID rid, uint32_t value,
+                                    int timeout_us) {
     if (!transport_) {
         errno = EINVAL;
         return 0;
@@ -180,8 +190,8 @@ ssize_t OpenArm::receive_states_batch_rt(damiao_motor::StateResult* states, ssiz
     }
 
     // Receive CAN frames
-    ssize_t n =
-        transport_->read_batch(rx_frames_.data(), std::min(max_count, static_cast<ssize_t>(MAX_CAN_FRAMES)), timeout_us);
+    ssize_t n = transport_->read_batch(
+        rx_frames_.data(), std::min(max_count, static_cast<ssize_t>(MAX_CAN_FRAMES)), timeout_us);
 
     // Decode received frames
     for (ssize_t i = 0; i < n; ++i) {
@@ -208,8 +218,8 @@ ssize_t OpenArm::receive_states_batch_rt(damiao_motor::StateResult* states, ssiz
             continue;
         }
 
-        states[midx] = damiao_motor::CanPacketDecoder::parse_motor_state_data(
-            *motors_[midx], rx.data, rx.len);
+        states[midx] =
+            damiao_motor::CanPacketDecoder::parse_motor_state_data(*motors_[midx], rx.data, rx.len);
     }
 
     return n;
@@ -237,6 +247,103 @@ void OpenArm::encode_simple_command(const damiao_motor::Motor& motor, uint8_t cm
 
     // Convert to CAN frame
     packet_to_frame(packet, frame);
+}
+
+bool OpenArm::load_limits_from_motors(int timeout_ms) {
+    if (!transport_) {
+        return false;
+    }
+
+    // Pre-allocated storage for limit values per motor
+    std::array<double, MAX_MOTORS> pmax_values;
+    std::array<double, MAX_MOTORS> vmax_values;
+    std::array<double, MAX_MOTORS> tmax_values;
+
+    pmax_values.fill(-1.0);
+    vmax_values.fill(-1.0);
+    tmax_values.fill(-1.0);
+
+    // Query PMAX for all motors
+    for (size_t i = 0; i < motor_count_; ++i) {
+        auto packet = damiao_motor::CanPacketEncoder::create_query_param_command(
+            *motors_[i], static_cast<int>(damiao_motor::RID::PMAX));
+        packet_to_frame(packet, tx_cmd_[i]);
+    }
+    transport_->write_batch(tx_cmd_.data(), motor_count_, 500);
+
+    // Query VMAX for all motors
+    for (size_t i = 0; i < motor_count_; ++i) {
+        auto packet = damiao_motor::CanPacketEncoder::create_query_param_command(
+            *motors_[i], static_cast<int>(damiao_motor::RID::VMAX));
+        packet_to_frame(packet, tx_cmd_[i]);
+    }
+    transport_->write_batch(tx_cmd_.data(), motor_count_, 500);
+
+    // Query TMAX for all motors
+    for (size_t i = 0; i < motor_count_; ++i) {
+        auto packet = damiao_motor::CanPacketEncoder::create_query_param_command(
+            *motors_[i], static_cast<int>(damiao_motor::RID::TMAX));
+        packet_to_frame(packet, tx_cmd_[i]);
+    }
+    transport_->write_batch(tx_cmd_.data(), motor_count_, 500);
+
+    // Receive responses with timeout
+    auto start_time = std::chrono::steady_clock::now();
+    while (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() -
+                                                                 start_time)
+               .count() < timeout_ms) {
+        ssize_t n = transport_->read_batch(rx_frames_.data(), MAX_CAN_FRAMES, 1000);
+
+        for (ssize_t i = 0; i < n; ++i) {
+            const can_frame& frame = rx_frames_[i];
+
+            // Check if this is a parameter response (cmd = 0x33 for query response)
+            if (frame.len < 8 || frame.data[2] != 0x33) {
+                continue;
+            }
+
+            // Parse using raw bytes
+            auto result =
+                damiao_motor::CanPacketDecoder::parse_motor_param_data(frame.data, frame.len);
+
+            if (!result.valid) continue;
+
+            // Get motor CAN ID from response (first 2 bytes)
+            uint32_t motor_send_can_id =
+                (static_cast<uint32_t>(frame.data[1]) << 8) | frame.data[0];
+
+            int motor_idx = send_id_to_motor_index_[motor_send_can_id];
+
+            if (motor_idx < 0) continue;
+
+            // Store the value based on RID
+            if (result.rid == static_cast<int>(damiao_motor::RID::PMAX)) {
+                pmax_values[motor_idx] = result.value;
+            } else if (result.rid == static_cast<int>(damiao_motor::RID::VMAX)) {
+                vmax_values[motor_idx] = result.value;
+            } else if (result.rid == static_cast<int>(damiao_motor::RID::TMAX)) {
+                tmax_values[motor_idx] = result.value;
+            }
+        }
+    }
+
+    // Validate and set limits for all motors
+    for (size_t i = 0; i < motor_count_; ++i) {
+        if (pmax_values[i] <= 0 || vmax_values[i] <= 0 || tmax_values[i] <= 0) {
+            std::cerr << "ERROR: Invalid limit parameters from motor "
+                      << motors_[i]->get_send_can_id() << std::endl;
+            return false;
+        }
+
+        damiao_motor::LimitParam limit{pmax_values[i], vmax_values[i], tmax_values[i]};
+        motors_[i]->set_limit(limit);
+
+        std::cerr << "Motor " << motors_[i]->get_send_can_id() << " limits: pMax=" << pmax_values[i]
+                  << " rad, vMax=" << vmax_values[i] << " rad/s, tMax=" << tmax_values[i] << " Nm"
+                  << std::endl;
+    }
+
+    return true;
 }
 
 }  // namespace openarm::realtime

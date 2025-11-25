@@ -36,14 +36,15 @@ CANPacket CanPacketEncoder::create_set_zero_command(const Motor& motor) {
 
 CANPacket CanPacketEncoder::create_mit_control_command(const Motor& motor,
                                                        const MITParam& mit_param) {
-    return {motor.get_send_can_id(), pack_mit_control_data(motor.get_motor_type(), mit_param)};
+    return {motor.get_send_can_id(), pack_mit_control_data(motor, mit_param)};
 }
 
 CANPacket CanPacketEncoder::create_query_param_command(const Motor& motor, int RID) {
     return {0x7FF, pack_query_param_data(motor.get_send_can_id(), RID)};
 }
 
-CANPacket CanPacketEncoder::create_write_param_command(const Motor& motor, int RID, uint32_t value) {
+CANPacket CanPacketEncoder::create_write_param_command(const Motor& motor, int RID,
+                                                       uint32_t value) {
     return {0x7FF, pack_write_param_data(motor.get_send_can_id(), RID, value)};
 }
 
@@ -65,11 +66,15 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
                                                      const std::vector<uint8_t>& data) {
     if (data.size() < 8) {
         std::cerr << "Warning: Skipping motor state data less than 8 bytes" << std::endl;
-        return {0, 0, 0, 0, 0, 0, false};
+        return {0, 0, 0, 0, 0, 0, false, false};
     }
 
-    // Parse error code from upper 4 bits of byte 0
-    uint8_t error_code = (data[0] >> 4) & 0x0F;
+    // Parse status from upper 4 bits of byte 0
+    uint8_t status_nibble = (data[0] >> 4) & 0x0F;
+
+    // Extract enabled state and error code from status nibble
+    uint8_t error_code = status_nibble & 0xE;  // Upper 3 bits contain error code
+    bool enabled = status_nibble & 0x1;         // Lower bit indicates enabled state
 
     // Parse state data
     uint16_t q_uint = (static_cast<uint16_t>(data[1]) << 8) | data[2];
@@ -80,24 +85,34 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
     int t_rotor = static_cast<int>(data[7]);
 
     // Convert to physical values
-    LimitParam limits = MOTOR_LIMIT_PARAMS[static_cast<int>(motor.get_motor_type())];
+    auto limit_opt = motor.get_limit();
+    if (!limit_opt.has_value()) {
+        std::cerr << "ERROR: Motor " << motor.get_send_can_id()
+                  << " has no limit parameters set. Call enable to load limits from motor." << std::endl;
+        return {0, 0, 0, 0, 0, 0, false, false};
+    }
+
+    LimitParam limits = limit_opt.value();
     double recv_q = CanPacketDecoder::uint_to_double(q_uint, -limits.pMax, limits.pMax, 16);
     double recv_dq = CanPacketDecoder::uint_to_double(dq_uint, -limits.vMax, limits.vMax, 12);
     double recv_tau = CanPacketDecoder::uint_to_double(tau_uint, -limits.tMax, limits.tMax, 12);
 
-    return {recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, true};
+    return {recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, enabled, true};
 }
 
-StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
-                                                     const uint8_t* data,
+StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor, const uint8_t* data,
                                                      size_t len) {
     if (len < 8) {
         std::cerr << "Warning: Skipping motor state data less than 8 bytes" << std::endl;
-        return {0, 0, 0, 0, 0, 0, false};
+        return {0, 0, 0, 0, 0, 0, false, false};
     }
 
-    // Parse error code from upper 4 bits of byte 0
-    uint8_t error_code = (data[0] >> 4) & 0x0F;
+    // Parse status from upper 4 bits of byte 0
+    uint8_t status_nibble = (data[0] >> 4) & 0x0F;
+
+    // Extract enabled state and error code from status nibble
+    uint8_t error_code = status_nibble & 0xE;  // Upper 3 bits contain error code
+    bool enabled = status_nibble & 0x1;         // Lower bit indicates enabled state
 
     // Parse state data
     uint16_t q_uint = (static_cast<uint16_t>(data[1]) << 8) | data[2];
@@ -108,16 +123,27 @@ StateResult CanPacketDecoder::parse_motor_state_data(const Motor& motor,
     int t_rotor = static_cast<int>(data[7]);
 
     // Convert to physical values
-    LimitParam limits = MOTOR_LIMIT_PARAMS[static_cast<int>(motor.get_motor_type())];
+    auto limit_opt = motor.get_limit();
+    if (!limit_opt.has_value()) {
+        std::cerr << "ERROR: Motor " << motor.get_send_can_id()
+                  << " has no limit parameters set. Call enable to load limits from motor." << std::endl;
+        return {0, 0, 0, 0, 0, 0, false, false};
+    }
+
+    LimitParam limits = limit_opt.value();
     double recv_q = CanPacketDecoder::uint_to_double(q_uint, -limits.pMax, limits.pMax, 16);
     double recv_dq = CanPacketDecoder::uint_to_double(dq_uint, -limits.vMax, limits.vMax, 12);
     double recv_tau = CanPacketDecoder::uint_to_double(tau_uint, -limits.tMax, limits.tMax, 12);
 
-    return {recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, true};
+    return {recv_q, recv_dq, recv_tau, t_mos, t_rotor, error_code, enabled, true};
 }
 
 ParamResult CanPacketDecoder::parse_motor_param_data(const std::vector<uint8_t>& data) {
-    if (data.size() < 8) return {0, NAN, false};
+    return parse_motor_param_data(data.data(), data.size());
+}
+
+ParamResult CanPacketDecoder::parse_motor_param_data(const uint8_t* data, size_t len) {
+    if (len < 8) return {0, NAN, false};
 
     if ((data[2] == 0x33 || data[2] == 0x55)) {
         uint8_t RID = data[3];
@@ -136,17 +162,23 @@ ParamResult CanPacketDecoder::parse_motor_param_data(const std::vector<uint8_t>&
 }
 
 // Data packing utility methods
-std::vector<uint8_t> CanPacketEncoder::pack_mit_control_data(MotorType motor_type,
+std::vector<uint8_t> CanPacketEncoder::pack_mit_control_data(const Motor& motor,
                                                              const MITParam& mit_param) {
     uint16_t kp_uint = double_to_uint(mit_param.kp, 0, 500, 12);
     uint16_t kd_uint = double_to_uint(mit_param.kd, 0, 5, 12);
 
-    // Get motor limits based on type
-    LimitParam limits = MOTOR_LIMIT_PARAMS[static_cast<int>(motor_type)];
-    uint16_t q_uint = double_to_uint(mit_param.q, -(double)limits.pMax, (double)limits.pMax, 16);
-    uint16_t dq_uint = double_to_uint(mit_param.dq, -(double)limits.vMax, (double)limits.vMax, 12);
-    uint16_t tau_uint =
-        double_to_uint(mit_param.tau, -(double)limits.tMax, (double)limits.tMax, 12);
+    // Get motor limits from motor instance
+    auto limit_opt = motor.get_limit();
+    if (!limit_opt.has_value()) {
+        std::cerr << "ERROR: Motor " << motor.get_send_can_id()
+                  << " has no limit parameters set. Call enable to load limits from motor." << std::endl;
+        throw std::runtime_error("Motor limit parameters not initialized");
+    }
+
+    LimitParam limits = limit_opt.value();
+    uint16_t q_uint = double_to_uint(mit_param.q, -limits.pMax, limits.pMax, 16);
+    uint16_t dq_uint = double_to_uint(mit_param.dq, -limits.vMax, limits.vMax, 12);
+    uint16_t tau_uint = double_to_uint(mit_param.tau, -limits.tMax, limits.tMax, 12);
 
     return {static_cast<uint8_t>((q_uint >> 8) & 0xFF),
             static_cast<uint8_t>(q_uint & 0xFF),
@@ -169,7 +201,8 @@ std::vector<uint8_t> CanPacketEncoder::pack_query_param_data(uint32_t send_can_i
             0x00};
 }
 
-std::vector<uint8_t> CanPacketEncoder::pack_write_param_data(uint32_t send_can_id, int RID, uint32_t value) {
+std::vector<uint8_t> CanPacketEncoder::pack_write_param_data(uint32_t send_can_id, int RID,
+                                                             uint32_t value) {
     return {static_cast<uint8_t>(send_can_id & 0xFF),
             static_cast<uint8_t>((send_can_id >> 8) & 0xFF),
             0x55,

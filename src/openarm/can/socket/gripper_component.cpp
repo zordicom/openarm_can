@@ -30,11 +30,8 @@ void GripperComponent::init_motor_device(uint32_t send_can_id, uint32_t recv_can
     motor_device_ = std::make_shared<damiao_motor::DMCANDevice>(*motor_, CAN_SFF_MASK, use_fd);
     get_device_collection().add_device(motor_device_);
 
-    // Read limits from motor and set them
-    auto limits = read_limits_from_motors();
-    if (!limits.empty()) {
-        motor_->set_limit(limits[0]);
-    }
+    // Read limits from motor (also sets them on the motor object)
+    read_limits_from_motors();
 }
 
 void GripperComponent::open(double kp, double kd) { set_position(gripper_open_position_, kp, kd); }

@@ -63,10 +63,10 @@ public:
     Motor get_motor(int i) const;
     canbus::CANDeviceCollection& get_device_collection() { return *device_collection_; }
 
-    // Read motor limit parameters from hardware for all motors
+protected:
+    // Read motor limit parameters from hardware and set them on motor objects
     std::vector<LimitParam> read_limits_from_motors(int timeout_ms = 1000);
 
-protected:
     canbus::CANSocket& can_socket_;
     std::unique_ptr<CanPacketEncoder> can_packet_encoder_;
     std::unique_ptr<CanPacketDecoder> can_packet_decoder_;

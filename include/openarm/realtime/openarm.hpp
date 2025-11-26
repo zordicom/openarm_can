@@ -82,6 +82,14 @@ public:
     // Set control mode for all motors. Returns true if successful for all.
     bool set_mode_all_rt(ControlMode mode, int timeout_us = 500);
 
+    // Save parameters to flash for all motors. Motors must be disabled first.
+    // Returns number of save commands sent.
+    ssize_t save_params_to_flash_rt(int timeout_us = 500);
+
+    // Save parameters to flash for a single motor by index. Motor must be disabled first.
+    // Returns 1 on success, 0 or -1 on failure.
+    ssize_t save_params_to_flash_one_rt(size_t motor_index, int timeout_us = 500);
+
 private:
     // Pre-allocated motor storage (using pointers since Motor has no default constructor)
     std::array<std::unique_ptr<damiao_motor::Motor>, MAX_MOTORS> motors_;

@@ -23,8 +23,9 @@ OpenArm::OpenArm(std::unique_ptr<IOpenArmTransport> transport) : transport_(std:
         throw std::runtime_error("Invalid transport provided to OpenArm");
     }
 
-    // Initialize motor ID lookup table
+    // Initialize motor ID lookup tables
     std::fill(recv_id_to_motor_index_.begin(), recv_id_to_motor_index_.end(), -1);
+    std::fill(send_id_to_motor_index_.begin(), send_id_to_motor_index_.end(), -1);
 
     motor_count_ = 0;
 }
@@ -197,13 +198,19 @@ ssize_t OpenArm::receive_states_batch_rt(damiao_motor::StateResult* states, ssiz
     for (ssize_t i = 0; i < n; ++i) {
         // Find motor index from CAN ID (standard 11-bit IDs)
         uint32_t can_id = rx_frames_[i].can_id & CAN_SFF_MASK;
+
         if (can_id >= recv_id_to_motor_index_.size()) {
+            fprintf(stderr, "receive_states_batch_rt: CAN ID out of bounds\n");
             // out of bounds
             continue;
         }
 
         int midx = recv_id_to_motor_index_[can_id];
         if (midx < 0 || midx >= static_cast<int>(motor_count_)) {
+            fprintf(
+                stderr,
+                "receive_states_batch_rt: motor index out of bounds or not configured (midx=%d)\n",
+                midx);
             // out of bounds or not configured
             continue;
         }
@@ -213,7 +220,12 @@ ssize_t OpenArm::receive_states_batch_rt(damiao_motor::StateResult* states, ssiz
         // Check if this is a parameter response (not motor state)
         // Parameter responses have format: [can_id_lo] [can_id_hi] [cmd] [rid] [data...]
         // cmd = 0x33 (query response) or 0x55 (write response)
-        if (rx.len >= 3 && (rx.data[2] == 0x33 || rx.data[2] == 0x55)) {
+        // First two bytes should match the send_can_id
+        uint32_t send_id = motors_[midx]->get_send_can_id();
+        if (rx.len >= 3 && (rx.data[2] == 0x33 || rx.data[2] == 0x55) &&
+            rx.data[0] == (send_id & 0xFF) && rx.data[1] == ((send_id >> 8) & 0xFF)) {
+            fprintf(stderr, "receive_states_batch_rt: parameter response (cmd=0x%02X)\n",
+                    rx.data[2]);
             // This is a parameter response, skip it (don't decode as motor state)
             continue;
         }
@@ -344,6 +356,51 @@ bool OpenArm::load_limits_from_motors(int timeout_ms) {
     }
 
     return true;
+}
+
+ssize_t OpenArm::save_params_to_flash_rt(int timeout_us) {
+    if (!transport_) {
+        errno = EINVAL;
+        return 0;
+    }
+
+    // Build save commands for all motors
+    // Save command format: CAN ID 0x7FF, data = [motor_id_lo, motor_id_hi, 0xAA, 0, 0, 0, 0, 0]
+    for (size_t i = 0; i < motor_count_; ++i) {
+        can_frame& frame = tx_cmd_[i];
+        std::memset(&frame, 0, sizeof(frame));
+        frame.can_id = 0x7FF;
+        frame.len = 8;
+
+        uint32_t send_id = motors_[i]->get_send_can_id();
+        frame.data[0] = send_id & 0xFF;         // Motor ID low byte
+        frame.data[1] = (send_id >> 8) & 0xFF;  // Motor ID high byte
+        frame.data[2] = 0xAA;                   // Save to flash command
+        // data[3-7] = 0 (already zeroed by memset)
+    }
+
+    return transport_->write_batch(tx_cmd_.data(), motor_count_, timeout_us);
+}
+
+ssize_t OpenArm::save_params_to_flash_one_rt(size_t motor_index, int timeout_us) {
+    if (!transport_ || motor_index >= motor_count_) {
+        errno = EINVAL;
+        return 0;
+    }
+
+    // Build save command for single motor
+    can_frame frame;
+    std::memset(&frame, 0, sizeof(frame));
+    frame.can_id = 0x7FF;
+    frame.len = 8;
+
+    uint32_t send_id = motors_[motor_index]->get_send_can_id();
+    frame.data[0] = send_id & 0xFF;         // Motor ID low byte
+    frame.data[1] = (send_id >> 8) & 0xFF;  // Motor ID high byte
+    frame.data[2] = 0xAA;                   // Save to flash command
+    // data[3-7] = 0 (already zeroed by memset)
+
+    return transport_->write_batch(&frame, 1, timeout_us);
 }
 
 }  // namespace openarm::realtime

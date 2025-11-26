@@ -25,7 +25,7 @@ nanobind_dep = dependency('nanobind')
 openarm_cpp_dep = dependency(
     'openarm-can',
     'OpenArmCAN',
-    modules: ['OpenArmCAN::openarm_can'],
+    modules: ['OpenArmCAN::openarm_can', 'OpenArmCAN::openarm_can_realtime'],
 )
 
 py.install_sources(

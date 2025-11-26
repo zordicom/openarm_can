@@ -38,8 +38,8 @@
 using namespace openarm::canbus;
 using namespace openarm::damiao_motor;
 using namespace openarm::can::socket;
-namespace rt = openarm::realtime;
 
+namespace rt = openarm::realtime;
 namespace nb = nanobind;
 
 NB_MODULE(openarm_can, m) {
@@ -210,16 +210,14 @@ NB_MODULE(openarm_can, m) {
                     nb::arg("motor"), nb::arg("rid"));
 
     nb::class_<CanPacketDecoder>(m, "CanPacketDecoder")
-        .def_static(
-            "parse_motor_state_data",
-            static_cast<StateResult (*)(const Motor&, const std::vector<uint8_t>&)>(
-                &CanPacketDecoder::parse_motor_state_data),
-            nb::arg("motor"), nb::arg("data"))
-        .def_static(
-            "parse_motor_param_data",
-            static_cast<ParamResult (*)(const std::vector<uint8_t>&)>(
-                &CanPacketDecoder::parse_motor_param_data),
-            nb::arg("data"));
+        .def_static("parse_motor_state_data",
+                    static_cast<StateResult (*)(const Motor&, const std::vector<uint8_t>&)>(
+                        &CanPacketDecoder::parse_motor_state_data),
+                    nb::arg("motor"), nb::arg("data"))
+        .def_static("parse_motor_param_data",
+                    static_cast<ParamResult (*)(const std::vector<uint8_t>&)>(
+                        &CanPacketDecoder::parse_motor_param_data),
+                    nb::arg("data"));
 
     // ============================================================================
     // CANBUS NAMESPACE - EXCEPTIONS AND BASE CLASSES
@@ -378,8 +376,8 @@ NB_MODULE(openarm_can, m) {
     // GripperComponent class
     nb::class_<GripperComponent, DMDeviceCollection>(m, "GripperComponent")
         .def(nb::init<CANSocket&>(), nb::arg("can_socket"))
-        .def("init_motor_device", &GripperComponent::init_motor_device,
-             nb::arg("send_can_id"), nb::arg("recv_can_id"), nb::arg("use_fd"))
+        .def("init_motor_device", &GripperComponent::init_motor_device, nb::arg("send_can_id"),
+             nb::arg("recv_can_id"), nb::arg("use_fd"))
         .def("open", &GripperComponent::open, nb::arg("kp") = 50.0, nb::arg("kd") = 1.0)
         .def("close", &GripperComponent::close, nb::arg("kp") = 50.0, nb::arg("kd") = 1.0)
         .def("get_motor", &GripperComponent::get_motor, nb::rv_policy::reference_internal);

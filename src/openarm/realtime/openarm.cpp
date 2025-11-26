@@ -209,7 +209,7 @@ ssize_t OpenArm::receive_states_batch_rt(damiao_motor::StateResult* states, ssiz
         if (midx < 0 || midx >= static_cast<int>(motor_count_)) {
             fprintf(
                 stderr,
-                "receive_states_batch_rt:Motor index out of bounds or not configured (midx=%d)\n",
+                "receive_states_batch_rt: motor index out of bounds or not configured (midx=%d)\n",
                 midx);
             // out of bounds or not configured
             continue;

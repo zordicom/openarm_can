@@ -23,8 +23,9 @@ OpenArm::OpenArm(std::unique_ptr<IOpenArmTransport> transport) : transport_(std:
         throw std::runtime_error("Invalid transport provided to OpenArm");
     }
 
-    // Initialize motor ID lookup table
+    // Initialize motor ID lookup tables
     std::fill(recv_id_to_motor_index_.begin(), recv_id_to_motor_index_.end(), -1);
+    std::fill(send_id_to_motor_index_.begin(), send_id_to_motor_index_.end(), -1);
 
     motor_count_ = 0;
 }
@@ -197,13 +198,19 @@ ssize_t OpenArm::receive_states_batch_rt(damiao_motor::StateResult* states, ssiz
     for (ssize_t i = 0; i < n; ++i) {
         // Find motor index from CAN ID (standard 11-bit IDs)
         uint32_t can_id = rx_frames_[i].can_id & CAN_SFF_MASK;
+
         if (can_id >= recv_id_to_motor_index_.size()) {
+            fprintf(stderr, "receive_states_batch_rt: CAN ID out of bounds\n");
             // out of bounds
             continue;
         }
 
         int midx = recv_id_to_motor_index_[can_id];
         if (midx < 0 || midx >= static_cast<int>(motor_count_)) {
+            fprintf(
+                stderr,
+                "receive_states_batch_rt:Motor index out of bounds or not configured (midx=%d)\n",
+                midx);
             // out of bounds or not configured
             continue;
         }
@@ -213,7 +220,12 @@ ssize_t OpenArm::receive_states_batch_rt(damiao_motor::StateResult* states, ssiz
         // Check if this is a parameter response (not motor state)
         // Parameter responses have format: [can_id_lo] [can_id_hi] [cmd] [rid] [data...]
         // cmd = 0x33 (query response) or 0x55 (write response)
-        if (rx.len >= 3 && (rx.data[2] == 0x33 || rx.data[2] == 0x55)) {
+        // First two bytes should match the send_can_id
+        uint32_t send_id = motors_[midx]->get_send_can_id();
+        if (rx.len >= 3 && (rx.data[2] == 0x33 || rx.data[2] == 0x55) &&
+            rx.data[0] == (send_id & 0xFF) && rx.data[1] == ((send_id >> 8) & 0xFF)) {
+            fprintf(stderr, "receive_states_batch_rt: parameter response (cmd=0x%02X)\n",
+                    rx.data[2]);
             // This is a parameter response, skip it (don't decode as motor state)
             continue;
         }

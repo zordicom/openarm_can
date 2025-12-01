@@ -30,7 +30,7 @@ include(GNUInstallDirs)
 
 # Create the RT-safe library
 add_library(
-  openarm_can_realtime
+  openarm_can_realtime SHARED
   src/openarm/realtime/can.cpp
   src/openarm/realtime/canfd.cpp
   src/openarm/realtime/openarm.cpp
@@ -50,7 +50,7 @@ target_include_directories(
 
 # Create the main library
 add_library(
-  openarm_can
+  openarm_can SHARED
   src/openarm/can/socket/arm_component.cpp
   src/openarm/can/socket/gripper_component.cpp
   src/openarm/can/socket/openarm.cpp
@@ -161,4 +161,44 @@ target_link_libraries(openarm-diagnosis openarm_can)
 # Add tests
 if(BUILD_TESTING)
   # add_subdirectory(test)
+endif()
+
+# Build Python bindings using pip/meson
+option(BUILD_PYTHON_BINDINGS "Build Python bindings" ON)
+if(BUILD_PYTHON_BINDINGS)
+  find_package(Python3 COMPONENTS Interpreter Development)
+  if(Python3_FOUND)
+    # Get the Python site-packages directory relative to CMAKE_INSTALL_PREFIX
+    execute_process(
+      COMMAND ${Python3_EXECUTABLE} -c
+              "import sys; from distutils.sysconfig import get_python_lib; print(get_python_lib(prefix='${CMAKE_INSTALL_PREFIX}'))"
+      OUTPUT_VARIABLE PYTHON_SITE_PACKAGES
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    # Install Python bindings during install phase (after C++ libraries are installed)
+    install(CODE "
+      message(STATUS \"Building and installing Python bindings to ${PYTHON_SITE_PACKAGES}\")
+      execute_process(
+        COMMAND ${CMAKE_COMMAND} -E env
+                PKG_CONFIG_PATH=${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/pkgconfig:\$ENV{PKG_CONFIG_PATH}
+                CMAKE_PREFIX_PATH=${CMAKE_INSTALL_PREFIX}:\$ENV{CMAKE_PREFIX_PATH}
+                LD_LIBRARY_PATH=${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}:\$ENV{LD_LIBRARY_PATH}
+                ${Python3_EXECUTABLE} -m pip install
+                --target=${PYTHON_SITE_PACKAGES}
+                --upgrade
+                --no-deps
+                ${CMAKE_CURRENT_SOURCE_DIR}/python
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/python
+        RESULT_VARIABLE _result
+      )
+      if(_result)
+        message(FATAL_ERROR \"Failed to build Python bindings\")
+      endif()
+    ")
+
+    message(STATUS "Python bindings will be installed to: ${PYTHON_SITE_PACKAGES}")
+  else()
+    message(WARNING "Python3 not found. Skipping Python bindings.")
+  endif()
 endif()

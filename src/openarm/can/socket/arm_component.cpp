@@ -39,11 +39,8 @@ void ArmComponent::init_motor_devices(const std::vector<damiao_motor::MotorType>
         get_device_collection().add_device(motor_device);
     }
 
-    // Read limits from motors and set them
-    auto limits = read_limits_from_motors();
-    for (size_t i = 0; i < send_can_ids.size(); i++) {
-        motors_[i].set_limit(limits[i]);
-    }
+    // Read limits from motors (also sets them on the motor objects)
+    read_limits_from_motors();
 }
 
 }  // namespace openarm::can::socket

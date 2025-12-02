@@ -19,5 +19,5 @@ libdir=@PKG_CONFIG_LIBDIR@
 Name: OpenArm CAN
 Description: OpenArm CAN library
 Version: @PROJECT_VERSION@
-Libs: -L${libdir} -lopenarm_can
+Libs: -L${libdir} -lopenarm_can -lopenarm_can_realtime
 Cflags: -I${includedir}

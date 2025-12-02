@@ -31,6 +31,7 @@ __all__ = [
     "MotorType",
     "MotorVariable",
     "CallbackMode",
+    "RTControlMode",
 
     # Data structures
     "LimitParam",
@@ -47,6 +48,10 @@ __all__ = [
     "CANDevice",           # Base CAN device class
     "MotorDeviceCan",      # Motor device management
     "CANDeviceCollection",  # Device collection management
+
+    # RT-safe classes
+    "RTCANSocket",         # RT-safe CAN socket
+    "RTOpenArm",           # RT-safe OpenArm interface
 
     # Exceptions
     "CANSocketException",

@@ -119,12 +119,13 @@ void DMDeviceCollection::send_command_to_device(std::shared_ptr<DMCANDevice> dm_
             // Throttle error logging to once per 5 seconds
             static auto last_error_time = std::chrono::steady_clock::time_point::min();
             auto now = std::chrono::steady_clock::now();
-            if (std::chrono::duration_cast<std::chrono::seconds>(now - last_error_time).count() >= 5) {
-                std::cerr << "ERROR: Failed to write CANFD frame to CAN ID 0x"
-                          << std::hex << packet.send_can_id << std::dec
-                          << " (errno: " << errno << " - " << strerror(errno) << ")"
-                          << " [failures: " << write_failure_count_
-                          << "/" << write_total_count_ << "]" << std::endl;
+            if (std::chrono::duration_cast<std::chrono::seconds>(now - last_error_time).count() >=
+                5) {
+                std::cerr << "ERROR: Failed to write CANFD frame to CAN ID 0x" << std::hex
+                          << packet.send_can_id << std::dec << " (errno: " << errno << " - "
+                          << strerror(errno) << ")"
+                          << " [failures: " << write_failure_count_ << "/" << write_total_count_
+                          << "]" << std::endl;
                 last_error_time = now;
             }
         }
@@ -136,12 +137,13 @@ void DMDeviceCollection::send_command_to_device(std::shared_ptr<DMCANDevice> dm_
             // Throttle error logging to once per 5 seconds
             static auto last_error_time = std::chrono::steady_clock::time_point::min();
             auto now = std::chrono::steady_clock::now();
-            if (std::chrono::duration_cast<std::chrono::seconds>(now - last_error_time).count() >= 5) {
-                std::cerr << "ERROR: Failed to write CAN frame to CAN ID 0x"
-                          << std::hex << packet.send_can_id << std::dec
-                          << " (errno: " << errno << " - " << strerror(errno) << ")"
-                          << " [failures: " << write_failure_count_
-                          << "/" << write_total_count_ << "]" << std::endl;
+            if (std::chrono::duration_cast<std::chrono::seconds>(now - last_error_time).count() >=
+                5) {
+                std::cerr << "ERROR: Failed to write CAN frame to CAN ID 0x" << std::hex
+                          << packet.send_can_id << std::dec << " (errno: " << errno << " - "
+                          << strerror(errno) << ")"
+                          << " [failures: " << write_failure_count_ << "/" << write_total_count_
+                          << "]" << std::endl;
                 last_error_time = now;
             }
         }
@@ -149,9 +151,9 @@ void DMDeviceCollection::send_command_to_device(std::shared_ptr<DMCANDevice> dm_
 
     // Warn if failure rate exceeds 10%
     if (write_total_count_ % 100 == 0 && write_failure_count_ > write_total_count_ / 10) {
-        std::cerr << "WARNING: High CAN write failure rate detected: "
-                  << write_failure_count_ << "/" << write_total_count_
-                  << " (" << (100.0 * write_failure_count_ / write_total_count_) << "%)"
+        std::cerr << "WARNING: High CAN write failure rate detected: " << write_failure_count_
+                  << "/" << write_total_count_ << " ("
+                  << (100.0 * write_failure_count_ / write_total_count_) << "%)"
                   << " - possible bus contention or interface issues" << std::endl;
     }
 }
@@ -169,8 +171,8 @@ void DMDeviceCollection::mit_control_all(const std::vector<MITParam>& mit_params
 }
 
 void DMDeviceCollection::pos_vel_control_one(int i, const PosVelParam& pos_vel_param) {
-    CANPacket pos_vel_cmd =
-        CanPacketEncoder::create_pos_vel_control_command(get_dm_devices()[i]->get_motor(), pos_vel_param);
+    CANPacket pos_vel_cmd = CanPacketEncoder::create_pos_vel_control_command(
+        get_dm_devices()[i]->get_motor(), pos_vel_param);
     send_command_to_device(get_dm_devices()[i], pos_vel_cmd);
 }
 
@@ -215,8 +217,9 @@ std::vector<LimitParam> DMDeviceCollection::read_limits_from_motors(int timeout_
 
     // Receive responses with timeout
     auto start_time = std::chrono::steady_clock::now();
-    while (std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::steady_clock::now() - start_time).count() < timeout_ms) {
+    while (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() -
+                                                                 start_time)
+               .count() < timeout_ms) {
         // Read frame from socket and dispatch to callbacks
         if (can_socket_.is_canfd_enabled()) {
             canfd_frame frame;

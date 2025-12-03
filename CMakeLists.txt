@@ -169,9 +169,10 @@ if(BUILD_PYTHON_BINDINGS)
   find_package(Python3 COMPONENTS Interpreter Development)
   if(Python3_FOUND)
     # Get the Python site-packages directory relative to CMAKE_INSTALL_PREFIX
+    # Use posix_prefix scheme to match distutils behavior (no extra 'local/' directory)
     execute_process(
       COMMAND ${Python3_EXECUTABLE} -c
-              "import sys, sysconfig; print(sysconfig.get_path('purelib', vars={'base': '${CMAKE_INSTALL_PREFIX}', 'platbase': '${CMAKE_INSTALL_PREFIX}'}))"
+              "import sys, sysconfig; print(sysconfig.get_path('purelib', scheme='posix_prefix', vars={'base': '${CMAKE_INSTALL_PREFIX}', 'platbase': '${CMAKE_INSTALL_PREFIX}'}))"
       OUTPUT_VARIABLE PYTHON_SITE_PACKAGES
       OUTPUT_STRIP_TRAILING_WHITESPACE
     )
